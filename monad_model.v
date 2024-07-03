@@ -166,10 +166,68 @@ HB.instance Definition _ :=
 End listmonad.
 End ListMonad.
 HB.export ListMonad.
-
 Lemma list_bindE (A B : UU0) (M := ListMonad.acto) (m : M A) (f : A -> M B) :
   m >>= f = flatten (map f m).
 Proof. by []. Qed.
+Module DelayMonad.
+Section delaymonad.
+
+CoInductive Delay (A : UU0) : Type := DNow : A -> Delay A | DLater : Delay A -> Delay A.
+Definition acto := Delay.
+Local Notation M := acto.
+Let ret : idfun ~~> M := @DNow.
+Let bind := fun A B (m: M A) (f: A -> M B) =>
+              (cofix bind_ u := match u with
+                                | DNow x => f x
+                                | DLater m' => DLater (bind_ m')
+                                end) m.
+Lemma DelayE (A : UU0) (m : M A) :
+  m = match m with
+      | DNow x => DNow x
+      | DLater m' => DLater m'
+      end.
+Proof. by case: m. Qed.
+Lemma left_neutral : BindLaws.left_neutral bind ret.
+Proof. by move=> A B a f; rewrite [LHS]DelayE [RHS]DelayE. Qed.
+CoInductive Bisim (A : UU0) : M A -> M A -> Type :=
+| BRefl (m : M A) : @Bisim A m m
+| BLater (m m' : M A) :
+  @Bisim A m m' -> @Bisim A (DLater m) (DLater m').
+Arguments Bisim [A].
+Arguments BLater [A].
+Axiom Bisim_eq : forall A (m m' : M A), Bisim m m' -> m = m'.
+CoFixpoint right_neutral_bisim A (m : M A) : Bisim (bind m (@ret A)) m.
+case: m=> [a|m].
+  rewrite [X in Bisim X]DelayE /=.
+  exact: BRefl.
+rewrite [X in Bisim X]DelayE /=.
+apply: BLater.
+exact: right_neutral_bisim.
+Qed.
+Lemma right_neutral : BindLaws.right_neutral bind ret.
+Proof. by move=> *; exact/Bisim_eq/right_neutral_bisim. Qed.
+CoFixpoint associative_bisim A B C (m : M A) (f : A -> M B) (g : B -> M C) :
+  Bisim (bind (bind m f) g) (bind m (fun x => bind (f x) g)).
+Proof.
+case: m=> [a|m].
+  rewrite [X in Bisim _ X]DelayE.
+  rewrite [X in Bisim X]DelayE.
+  simpl.
+  exact: BRefl.
+rewrite [X in Bisim _ X]DelayE.
+rewrite [X in Bisim X]DelayE.
+simpl.
+apply: BLater.
+exact: associative_bisim.
+Qed.
+Lemma associative : BindLaws.associative bind.
+Proof. move=> *; exact/Bisim_eq/associative_bisim. Qed.
+HB.instance Definition _ := isMonad_ret_bind.Build
+                              Delay left_neutral right_neutral associative.
+End delaymonad.
+End DelayMonad.  
+  
+
 
 Module SetMonad.
 Section setmonad.
