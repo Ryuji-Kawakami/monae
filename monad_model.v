@@ -226,9 +226,88 @@ HB.instance Definition _ := isMonad_ret_bind.Build
                               Delay left_neutral right_neutral associative.
 End delaymonad.
 End DelayMonad.  
-  
+HB.export DelayMonad.
 
+Module DelayOps.
+Section delayops.
+Definition M := DelayMonad.acto.
+Fixpoint steps A n (x : M A) : M A :=
+  match x with
+  | DNow a => DNow a
+  | DLater da => if n is m.+1 then steps m da else x
+  end.
+Variable wBisim : forall A, M A -> M A -> Type .
+(*
+Definition wBisim (A: UU0)  (d1 d2: M A): Type :=
+  exists (n:nat), Bisim (steps n d1) (steps n d2).
+ *)
+Lemma steps_bind {A B} (n:nat) (m: M A) (f: A -> M B) : wBisim (steps n (m >>= f)) (m >>= ((steps n) \o f)).
+Abort.
+Lemma steps_ret {A} (n:nat) (a: A) : wBisim (steps n (ret _ a)) (ret _ a). 
+Abort.
+Lemma steps_monotonisity {A} (n: nat) (d: Delay A):wBisim (steps n d )d.
+Abort.
+CoFixpoint while {A B} (body: A -> M(B + A)) :A -> M B :=
+      fun a => bind (body a) (fun ab => match ab with
+                                      |inr a => DLater (while body a)
+                                      |inl b => DNow b end).
+Definition sum_function(A B C : UU0) (f: A -> C) (g: B -> C) : A + B -> C:=
+  fun ab => match ab with
+           |inl a =>  (f a)
+           |inr b =>   (g b)
+           end.
+(* the next four conditions derived from Complete Elgot monads *)
+Lemma fixpoint {A B} (f: A -> M (B + A)):forall (a:A), wBisim (while f a) ((f a) >>= (sum_function (fun a => DNow a (*ret*)) (while f))) . Abort.
+Lemma naturality {A B C} (f: A -> M (B + A)) (g: B -> M C):
+ forall (x:A), wBisim ((while f x) >>= g) ( while (fun x => (f x) >>= (sum_function (Delay # inl \o g) (Delay # inr \o (fun a => DNow a (*ret*))) ) ) x) . Abort.
+Lemma codiagnal {A B} (f: A -> M ((B + A) + A)):
+   forall (x:A), wBisim (while ((Delay # ((sum_function (fun a => a)(*id*) inr)))  \o f ) x) (while (while f) x). Abort.
+Lemma uniform {A B C} (f:A -> Delay(B + A)) (g: C -> Delay (B + C)) (h: C -> Delay A) :
+  forall (z:C), wBisim ((h z) >>= f) (( (g z) >>= (sum_function ((Delay # inl) \o (fun (y:B) => DNow y)(*ret*)) ((Delay # inr) \o h )))) -> forall (z:C), wBisim ((h z) >>= (while f)) ( while g z). Abort.
+End delayops.
 
+Section delayops_examples.
+Variable wBisim : forall A, M A -> M A -> Type .
+Fixpoint fact (n:nat) :nat := match n with 
+                          |O => 1
+                          |S n' => n * fact n'
+                          end.
+Definition fact_body: nat * nat -> M (nat + nat*nat) := fun (a: nat * nat) =>
+                                            match a with
+                                            |(O, a2) => ret _ (inl a2)
+                                             |(S n', a2) => ret _ (inr (n',(S n') * a2))
+                                            end .
+Definition factdelay := fun (nm: nat*nat) => while fact_body nm .
+Lemma eq_fact_factdelay :forall n m, wBisim (ret _  (m * fact n)) (factdelay (n, m)).
+Abort.
+Definition collatzm_body (m:nat) (n:nat) :=
+  if n == 1 then DNow (inl m)
+  else if (n %%2 == 0) then ret _ (inr (n./2))
+       else ret _ (inr (3*n + 1)).
+Definition collatzm (m:nat) := while (collatzm_body m).
+Definition delaymul (m:nat) (d: M nat) :M nat := d >>= (fun n => ret _ (n*n)).
+Lemma collatzm_mul : forall (m n p: nat), wBisim  (delaymul p (collatzm m n)) (collatzm (p * m ) n ). Abort.
+Definition minus1_body (nm: nat*nat)  :M ((nat + nat*nat) + nat*nat):= match nm with
+                                                                |(O, m) => match m with
+                                                                         |O => ret _ (inl (inl O))
+                                                                         |S m' => ret _ (inl (inr (m', m')))
+                                                                         end
+                                                                |(S n', m) => ret _ (inr (n', m ))
+                                                                end.
+Definition minus1 := while (while minus1_body).
+Definition minus2_body (nm: nat*nat) : Delay (nat + nat*nat) := match nm with
+                                                      |(O,m) => match m with
+                                                                |O => ret _ (inl O)
+                                                                |S m' => ret _ (inr (m', m'))
+                                                                end
+                                                      |(S n', m) => ret _ (inr (n',m))
+                                                      end.
+Definition minus2 := while minus2_body.
+Lemma eq_minus : forall (nm: nat*nat), wBisim (minus1 nm) (minus2 nm). Abort.
+End delayops_examples.
+End DelayOps.
+HB.export DelayOps.
+      
 Module SetMonad.
 Section setmonad.
 Local Open Scope classical_set_scope.
