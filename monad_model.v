@@ -232,18 +232,374 @@ Module DelayOps.
 Section delayops.
 Definition M := DelayMonad.acto.
 Fixpoint steps A n (x : M A) : M A :=
-  match x with
-  | DNow a => DNow a
-  | DLater da => if n is m.+1 then steps m da else x
-  end.
-Variable wBisim : forall A, M A -> M A -> Type .
-(*
-Definition wBisim (A: UU0)  (d1 d2: M A): Type :=
-  exists (n:nat), Bisim (steps n d1) (steps n d2).
- *)
+  if n is m.+1 then 
+    match x with
+    | DNow a => DNow a
+    | DLater da => steps m da 
+    end
+  else x.
+
+Lemma stepsD A n m (x: M A) : steps (m + n) x = steps n (steps m x).
+Proof. 
+elim: m x => //=. 
+move => m IH [a | x]. 
+- by elim: n {IH}.
+- apply IH. 
+Qed.
+
+Lemma steps_now A n (a: A): steps n (DNow a) = DNow a.
+Proof.
+elim: n => //=. Qed.
+Lemma onestep_mono A n  (a: A): forall (x: M A), steps n (DLater x) = DNow a -> steps n x = DNow a.
+Proof.
+elim: n. 
+move => //= Hx.
+move => n IH //= x.
+case: x IH.
+move => a0 IH Ha. 
+by rewrite steps_now in Ha.
+move => d IH Ha.
+apply (IH d).
+apply Ha.
+Qed.
+
+Lemma nmSleq (n:nat) (m:nat): n<= m.+1 -> n = m.+1 \/ n <= m.
+Proof. 
+move=> H.
+  case: (leqP n m) => [Hleq | Hnleq].
+  - right. by []. 
+  - left. apply /eqP. by rewrite eqn_leq H Hnleq.
+Qed.
+
+Lemma monotonicity_steps A (x: M A) (a: A) (n: nat):  steps n x = DNow a -> forall m, n <= m -> steps m x = DNow a. 
+Proof.
+move => Hn m. 
+elim: m => //=. 
+rewrite leqn0.
+move => /eqP Hnm.
+rewrite Hnm in Hn. 
+move: Hn => Hn //=.
+move => m IH Hnm.
+case: x Hn IH => a0 Ha Hm.
+case: n Ha Hnm Hm. 
+move => //= Ha Hnm Hm.
+move => n //= Ha Hnm IH.
+apply nmSleq in Hnm. inversion Hnm.
+- rewrite H in Ha.
+  by [].
+- apply Hm in H.
+  by apply onestep_mono.
+Qed.
+
+
+CoFixpoint spin A  :M A  := DLater (spin A).
+
+Lemma DLater_spin A : Bisim (DLater (spin A)) (spin A).
+Proof.
+cofix IH.
+rewrite [X in DLater X]DelayE [X in Bisim _ X]DelayE /=.
+exact/BLater/IH.
+Qed.
+
+
+Lemma spinE A: DLater (@spin A) =  (@spin A). 
+Proof.
+by apply (Bisim_eq (@DLater_spin A)).
+Qed.
+
+Lemma stepsn_spin A n: steps n (@spin A) = (@spin A). 
+Proof.
+elim: n => //=.
+Qed.
+
+Lemma neq_spin_Dnow A (a: A) : (@spin A) <> DNow a.
+Proof.
+rewrite -spinE.
+move => Hs //=.
+Qed.
+
+Lemma nonsteps_spin A : ~(exists (a: A) (n: nat), steps n (@spin A) = DNow a ).
+Proof.
+move => [a [n Hm]].
+elim: n Hm.
+- move => //=  H.
+  by apply neq_spin_Dnow in H.
+- rewrite -spinE.
+  move => n IH //= Hs.
+  apply IH.
+  by rewrite spinE.
+Qed.
+
+CoFixpoint nosteps_spin A (x: M A) : ~(exists (a:A) (n:nat), steps n x = DNow a) -> Bisim x (@spin A).
+Proof. 
+case:x => [a|m] .
+- move=> H.
+  have: exists a0 n, steps n (DNow a) = DNow a0.
+  exists a. exists 0. by [].
+  move => /H H'. inversion H'.
+- move => H.
+  have: Bisim m (@spin A). apply nosteps_spin. 
+  move => [a [n Hm]]. 
+  apply H. 
+  exists a. exists n.+1. by [].
+  move => Hm . 
+  rewrite -spinE. 
+  by apply BLater.
+Qed.
+
+Inductive Terminates A: M A -> A -> Prop :=
+  |TDNow a : Terminates (DNow a) a
+  |TDLater d a: Terminates d a -> Terminates (DLater d) a. 
+
+CoInductive Oeq A: M A -> M A -> Prop :=
+  |OTerminate d1 d2 a: Terminates d1 a -> Terminates d2 a -> Oeq d1 d2
+  |OLater d1 d2: Oeq d1 d2 -> Oeq (DLater d1) (DLater d2). 
+
+CoFixpoint ReflOeq A (d: M A):Oeq d d.
+Proof. 
+case: d.
+- move => a.
+  have: Terminates (DNow a) a. apply TDNow.
+  move => Ha.
+  apply (OTerminate Ha Ha).
+- move => d.
+  by apply OLater.
+Qed.
+ 
+Lemma SymOeq A (d1 d2: M A): Oeq d1 d2 -> Oeq d2 d1.
+- move: d1 d2.
+  cofix CIH.
+  move => d1 d2 H12.
+  case: d1 H12.
+  + case: d2 .
+    + move => a b H12.
+      inversion H12.
+      apply (OTerminate H0 H).
+    + move => d a H12.
+      inversion H12.
+      apply (OTerminate H0 H).
+  + case: d2.
+    + move => a d H12.
+      inversion H12.      
+      apply (OTerminate H0 H).
+      move => d1 d2 H12.
+      inversion H12.
+      apply (OTerminate H0 H).
+      apply (OLater (CIH d2 d1 H1) ) .
+Qed.
+
+Lemma Terminates_steps A (d: M A) (a: A): Terminates d a <-> (exists n, steps n d = DNow a). 
+Proof.
+split.
+- move => Ht. 
+  elim: Ht => //=.
+  + move => a0. exists 0. by [].  
+  + move => d0 a0 IH1 IH2. 
+    inversion IH2.
+    exists x.+1. by [].
+- move => Hs.
+  inversion Hs.
+  move: d Hs H.
+  elim: x.
+  + move => d Hs //= Hda.  
+    rewrite Hda. apply (TDNow a).
+  + move => n IH //= d Hs Hda. 
+    case: d Hs IH Hda.
+    + move => a0 Hs IH Haa0.
+      rewrite Haa0.
+      apply (TDNow a).
+    + move => d Hs IH Hda.
+      apply TDLater. 
+      inversion Hs.
+      case: x H.
+      + move => //= Hs. 
+      + move => n0 //= Hda0.
+        apply IH. by exists n0. by [].
+Qed.
+
+CoFixpoint Oeqspin A: Oeq (@spin A) (@spin A).
+Proof.
+rewrite -spinE.
+by apply OLater. Qed.
+
+Lemma not_Oeq_spin_now A (a: A): ~ (Oeq (DNow a) (@spin A)). 
+Proof.
+move => H.
+inversion H.
+apply Terminates_steps in H1.
+have: exists (a: A) (n : nat), steps n (spin A) = DNow a. by exists a0.
+move => He.
+by apply nonsteps_spin in He.
+Qed.
+
+Lemma onesteps_Oeq A (d1 d2: M A) :  Oeq d1 d2 <-> Oeq (DLater d1) d2 .
+Proof.
+split.
+- move: d1 d2.
+   cofix CIH.
+  move => d1 d2 Ho.  
+  case: d2 Ho.
+  + move => a Ha.
+    inversion Ha.
+    inversion H0.
+    rewrite -H3.
+    rewrite -H3 in H0.
+    have: Terminates (DLater d1) a.
+    rewrite -H3 in H.
+    apply (TDLater H ).
+    move => Hda.
+    apply (OTerminate  Hda H0).
+  + move => d Hd.
+    inversion Hd.
+    have: Terminates (DLater d1) a.
+    apply (TDLater H).
+    move => Ha.
+    apply (OTerminate Ha H0).    
+    apply CIH in H1.
+    by apply OLater.
+- move: d1 d2.
+  cofix CIH.
+  move => d1 d2 Ho.  
+  case: d1 Ho.
+  + move => a Ha.
+    inversion Ha.
+    inversion H.
+    apply (OTerminate H4 H0).
+    inversion H0.
+    apply TDLater in H3.
+    apply (OTerminate H2 H3).
+  + move => d Hd.
+    inversion Hd.
+    inversion H.
+    apply (OTerminate H4 H0).
+    apply OLater.    
+    by apply CIH in H0.
+Qed.    
+Lemma steps_Oeq A (d1 d2: M A) (n:nat):  Oeq d1 d2 <-> Oeq (steps n d1) d2 .
+Proof.
+split.
+- move: d1. 
+  elim: n.
+  + move => d1 Hd //=.
+  + move => n IH d1 Hd .
+    case: d1 Hd.
+    + move => a Ha.
+      by rewrite steps_now.
+    + move => d Hd //=.
+      apply onesteps_Oeq in Hd.
+      by apply IH in Hd.
+- move: d1.
+  elim: n.
+  + move => d1 //= Hd.
+  + move => n IH d1 //= Hd.
+    case: d1 Hd => //=.
+    move => d Hd.
+    have: Oeq d d2 -> Oeq (DLater d) d2.
+    apply onesteps_Oeq.
+    move => H.
+    apply H.
+    by apply IH.    
+Qed.
+Definition wBisims (A: UU0)  (d1 d2: M A): Prop :=
+  exists (n:nat), (steps n d1) = (steps n d2).
+Theorem wBisms_Oeq_equ A (d1 d2 : M A) : wBisims d1 d2 <-> Oeq d1 d2. 
+Proof.
+Import boolp. 
+split.
+case/boolP: `[< exists a, exists n, steps n d1 = DNow a >].
+move/asboolP => [a Ha]. 
+case/boolP: `[< exists a, exists n, steps n d2 = DNow a >]. 
+move/asboolP => [b Hb]. 
+- move => [n Hw].
+  have: DNow a = DNow b.
+  inversion Ha.
+  inversion Hb.
+  have: steps (n+x+x0) d1 = steps (n+x+x0) d2.
+  rewrite !stepsD.
+  by rewrite Hw.
+  have: steps (n + x + x0) d1 = DNow a.
+  apply monotonicity_steps with(n := x).
+  by [].
+  rewrite addnACl.
+  apply leq_addr.
+  have: steps (n + x + x0) d2 = DNow b.
+  apply monotonicity_steps with(n := x0).
+  by []. Search (_ + _ + _).
+  rewrite addnCAC -addnA. 
+  apply leq_addr.
+  move => Hd2 Hd1 Hdd.
+  by rewrite -Hd1 -Hd2.
+  move => Hab.
+  rewrite -Hab in Hb.
+  apply Terminates_steps in Ha.
+  apply Terminates_steps in Hb.
+  apply (OTerminate Ha Hb).
+- move/asboolP => /nosteps_spin Hs. 
+  apply Bisim_eq in Hs.
+  rewrite Hs.
+  move=> [m Hw].
+  rewrite stepsn_spin in Hw.
+  apply (steps_Oeq d1 (@spin A) m).
+  rewrite Hw.
+  apply Oeqspin.
+- case/boolP: `[< exists a, exists n, steps n d2 = DNow a >]. 
+  move/asboolP => [b Hb]. 
+  + move/asboolP => /nosteps_spin Hs. 
+  apply Bisim_eq in Hs.
+  rewrite Hs.
+  move=> [m Hw].
+  rewrite stepsn_spin in Hw.
+  rewrite Hw.
+  apply (steps_Oeq d2 d2  m).
+  apply ReflOeq.
+  + move/asboolP => /nosteps_spin /Bisim_eq Hd2 /asboolP /nosteps_spin /Bisim_eq Hd1.
+    move => Hw. 
+    rewrite Hd1 Hd2.
+    apply ReflOeq.
+- case/boolP: `[< exists a, exists n, steps n d1 = DNow a >].
+  move/asboolP => [a [n Ha]]. 
+  case/boolP: `[< exists a, exists n, steps n d2 = DNow a >]. 
+  move/asboolP => [b [m Hb]]. 
+  + rewrite (steps_Oeq d1 d2 (n + m)).
+    move => /SymOeq Ho.
+    rewrite (steps_Oeq d2 (steps (n + m) d1) (n + m)) in Ho.
+    have: steps (n + m ) d1 = DNow a.
+    apply (monotonicity_steps Ha (leq_addr m n )).
+    have: steps (n + m ) d2 = DNow b.
+    rewrite addnC. 
+    apply (monotonicity_steps Hb (leq_addr n m )).
+    move => Hd2 Hd1. 
+    have: DNow a = DNow b.
+    move: Ho.
+    rewrite Hd1 Hd2.
+    move => Ho.
+    inversion Ho.
+    inversion H.
+    by inversion H0.
+    move => Hab.
+    rewrite Hab in Hd1.
+    exists (n + m). 
+    by rewrite Hd1 Hd2. 
+  + move/asboolP => /nosteps_spin /Bisim_eq Hd2.
+    rewrite (steps_Oeq d1 d2 n) Ha Hd2.
+    move => Has.
+    by apply not_Oeq_spin_now in Has.
+- case/boolP: `[< exists a, exists n, steps n d2 = DNow a >]. 
+  move/asboolP => [b [m Hb]].
+  + move/asboolP => /nosteps_spin /Bisim_eq Hd2.
+    move => /SymOeq Ho.
+    rewrite (steps_Oeq d2 d1 m) Hd2 Hb in Ho.
+    by apply not_Oeq_spin_now in Ho.
+  + move/asboolP => /nosteps_spin /Bisim_eq Hd2 /asboolP /nosteps_spin /Bisim_eq Hd1 Ho.
+    rewrite Hd1 Hd2.
+    by exists 0.
+Qed.    
+
+
+
 Lemma steps_bind {A B} (n:nat) (m: M A) (f: A -> M B) : wBisim (steps n (m >>= f)) (m >>= ((steps n) \o f)).
 Abort.
-Lemma steps_ret {A} (n:nat) (a: A) : wBisim (steps n (ret _ a)) (ret _ a). 
+Lemma steps_ret {A} (n:nat) (a: A) : wBisim (steps n (@ret M A a)) (@ret M A a). 
 Abort.
 Lemma steps_monotonisity {A} (n: nat) (d: Delay A):wBisim (steps n d )d.
 Abort.
@@ -257,17 +613,16 @@ Definition sum_function(A B C : UU0) (f: A -> C) (g: B -> C) : A + B -> C:=
            |inr b =>   (g b)
            end.
 (* the next four conditions derived from Complete Elgot monads *)
-Lemma fixpoint {A B} (f: A -> M (B + A)):forall (a:A), wBisim (while f a) ((f a) >>= (sum_function (fun a => DNow a (*ret*)) (while f))) . Abort.
+Lemma fixpoint {A B} (f: A -> M (B + A)):forall (a:A), wBisim (while f a) ((f a) >>= (sum_rect (fun => M B ) (@DNow B ) (while f))) . Abort.
 Lemma naturality {A B C} (f: A -> M (B + A)) (g: B -> M C):
- forall (x:A), wBisim ((while f x) >>= g) ( while (fun x => (f x) >>= (sum_function (Delay # inl \o g) (Delay # inr \o (fun a => DNow a (*ret*))) ) ) x) . Abort.
+ forall (x:A), wBisim ((while f x) >>= g) ( while (fun x => (f x) >>= (sum_rect (fun => M (C + A)) (Delay # inl \o g) (Delay # inr \o (@DNow A)) ) ) x) . Abort.
 Lemma codiagnal {A B} (f: A -> M ((B + A) + A)):
-   forall (x:A), wBisim (while ((Delay # ((sum_function (fun a => a)(*id*) inr)))  \o f ) x) (while (while f) x). Abort.
+   forall (x:A), wBisim (while ((Delay # ((sum_function idfun inr)))  \o f ) x) (while (while f) x). Abort.
 Lemma uniform {A B C} (f:A -> Delay(B + A)) (g: C -> Delay (B + C)) (h: C -> Delay A) :
   forall (z:C), wBisim ((h z) >>= f) (( (g z) >>= (sum_function ((Delay # inl) \o (fun (y:B) => DNow y)(*ret*)) ((Delay # inr) \o h )))) -> forall (z:C), wBisim ((h z) >>= (while f)) ( while g z). Abort.
 End delayops.
 
 Section delayops_examples.
-Variable wBisim : forall A, M A -> M A -> Type .
 Fixpoint fact (n:nat) :nat := match n with 
                           |O => 1
                           |S n' => n * fact n'
@@ -278,14 +633,14 @@ Definition fact_body: nat * nat -> M (nat + nat*nat) := fun (a: nat * nat) =>
                                              |(S n', a2) => ret _ (inr (n',(S n') * a2))
                                             end .
 Definition factdelay := fun (nm: nat*nat) => while fact_body nm .
-Lemma eq_fact_factdelay :forall n m, wBisim (ret _  (m * fact n)) (factdelay (n, m)).
+Lemma eq_fact_factdelay :forall n m, wBisim (@ret M nat (m * fact n)) (factdelay (n, m)).
 Abort.
 Definition collatzm_body (m:nat) (n:nat) :=
   if n == 1 then DNow (inl m)
   else if (n %%2 == 0) then ret _ (inr (n./2))
        else ret _ (inr (3*n + 1)).
 Definition collatzm (m:nat) := while (collatzm_body m).
-Definition delaymul (m:nat) (d: M nat) :M nat := d >>= (fun n => ret _ (n*n)).
+Definition delaymul (m:nat) (d: M nat) :M nat := d >>= (fun n => ret _ (m * n)).
 Lemma collatzm_mul : forall (m n p: nat), wBisim  (delaymul p (collatzm m n)) (collatzm (p * m ) n ). Abort.
 Definition minus1_body (nm: nat*nat)  :M ((nat + nat*nat) + nat*nat):= match nm with
                                                                 |(O, m) => match m with
