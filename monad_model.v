@@ -830,11 +830,29 @@ Fixpoint fact (n:nat) :nat := match n with
 Definition fact_body: nat * nat -> M (nat + nat*nat) := fun (a: nat * nat) =>
                                             match a with
                                             |(O, a2) => ret _ (inl a2)
-                                             |(S n', a2) => ret _ (inr (n',(S n') * a2))
+                                             |(S n', a2) => ret _ (inr (n', a2 * (S n') ))
                                             end .
 Definition factdelay := fun (nm: nat*nat) => while fact_body nm .
-Lemma eq_fact_factdelay :forall n m, wBisim (@ret M nat (m * fact n)) (factdelay (n, m)).
-Abort.
+Lemma eq_fact_factdelay :forall n m, wBisims (factdelay (n, m)) (@ret M nat (m * fact n)).
+move => n.
+rewrite  /factdelay.
+elim: n.
+- move => m.
+  eapply wBisims_trans.
+  apply fixpoint.
+  simpl.
+  rewrite bindNE(*bind_ret*) muln1 //=.
+  apply wBisim_refl.
+- move => n IH m.
+  eapply wBisims_trans.
+  apply fixpoint.
+  simpl.
+  rewrite bindNE (*bind_ret*) //=.
+  eapply wBisims_trans. 
+  apply IH. 
+  rewrite mulnA.
+  apply wBisim_refl.
+Qed.
 Definition collatzm_body (m:nat) (n:nat) :=
   if n == 1 then DNow (inl m)
   else if (n %%2 == 0) then ret _ (inr (n./2))
