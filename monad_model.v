@@ -173,10 +173,9 @@ Module DelayMonad.
 Section delaymonad.
 
 CoInductive Delay (A : UU0) : Type := DNow : A -> Delay A | DLater : Delay A -> Delay A.
-Definition acto := Delay.
-Local Notation M := acto.
-Let ret : idfun ~~> M := @DNow.
-Let bind := fun A B (m: M A) (f: A -> M B) =>
+Local Notation M := Delay.
+Definition ret : idfun ~~> M := @DNow.
+Definition bind := fun A B (m: M A) (f: A -> M B) =>
               (cofix bind_ u := match u with
                                 | DNow x => f x
                                 | DLater m' => DLater (bind_ m')
@@ -230,7 +229,7 @@ HB.export DelayMonad.
 
 Module DelayOps.
 Section delayops.
-Definition M := DelayMonad.acto.
+Local Notation M := Delay.
 Fixpoint steps A n (x : M A) : M A :=
   if n is m.+1 then 
     match x with
@@ -510,11 +509,13 @@ Print reflexive.
 Notation "a '≈' b" := (wBisim a b).
 Lemma wBisim_refl A : reflexive (@wBisim A).
 Proof. rewrite  /reflexive /wBisim . move => x. apply /asboolP. by exists 0. Qed.
-Lemma wBisim_sym A (d1 d2 : M A) : d1 ≈ d2 -> d2 ≈ d1.
-Proof. move => /asboolP [n Hs]. apply /asboolP. by exists n . Qed.
-Lemma wBisim_trans A (d1 d2 d3: M A) : d1 ≈ d2 -> d2 ≈ d3 -> d1 ≈ d3.
+Let wBisim_sym' A (d1 d2: M A): d1 ≈ d2 -> d2 ≈ d1.
+Proof. move/asboolP => [n Hs]. apply /asboolP. by exists n. Qed.
+Lemma wBisim_sym A : symmetric (@wBisim A).
+Proof. by move => *; apply/idP/idP; exact:wBisim_sym'. Qed.
+Lemma wBisim_trans A : transitive (@wBisim A).
 Proof.
-move => /asboolP [n Hs1].
+move => ? ? ? /asboolP [n Hs1].
 move => /asboolP [m Hs2].
 apply /asboolP.
 exists (n + m).
@@ -605,7 +606,7 @@ split.
 Qed.    
 Lemma steps_bind {A B} (n:nat) (m: M A) (f: A -> M B) : steps n (m >>= f) ≈  m >>= ((steps n) \o f).
 Abort.
-Lemma steps_ret {A} (n:nat) (a: A) : steps n (@ret M A a) ≈ @ret M A a. 
+Lemma steps_ret {A} (n:nat) (a: A) : steps n (@ret A a) ≈ @ret A a. 
 Abort.
 Lemma steps_monotonisity {A} (n: nat) (d: Delay A):steps n d  ≈ d.
 Abort.
@@ -634,7 +635,7 @@ case: (f a).
   rewrite [RHS](DelayE) //=.
 Qed.
 
-Lemma bindNE A B (a: A) (f: A -> M B): bind (DNow a) f = f a. (*bind_ret*)
+Lemma bindNE A B (a: A) (f: A -> M B): (DNow a) >>= f = f a. (*bind_ret*)
 Proof.
 rewrite [LHS](DelayE) //=. 
 rewrite -[LHS]DelayE //=.
@@ -720,14 +721,14 @@ elim: n.
     apply SymOeq.
     apply->  onesteps_Oeq.
     apply wBisms_Oeq_equ.
-    apply wBisim_sym.
+    rewrite wBisim_sym.
     by apply IH. 
 Qed.
 Lemma bind_steps A B (d1: M A) : (exists n a, ( steps n d1 = DNow a)) -> forall  (f: A -> M B) (d2: M B) (m: nat), steps m d1 >>= f ≈ d2 -> d1 >>= f ≈ d2. 
 Proof.
 move => [n [a Hs]] f d2 m Hw.
 have: d1 >>= f ≈ DNow a >>= f.
-apply wBisim_sym.
+rewrite wBisim_sym.
 apply binds.
 by exists n.
 move => Hn.
@@ -783,7 +784,7 @@ move/asboolP => [ab Hab].
   apply bind_steps with (m := x). 
   apply H.
 - rewrite H0 bindNE.
-  apply wBisim_sym.
+  rewrite wBisim_sym.
   apply bind_steps with (m:= x). by [].
   rewrite H0. 
   case: ab Hab H H0. 
@@ -792,7 +793,7 @@ move/asboolP => [ab Hab].
     apply wBisim_refl.
   + move => a2 Hab H H0. 
     rewrite bindNE //=. 
-    apply wBisim_sym. 
+    rewrite wBisim_sym. 
     apply wBisims_later.
     apply wBisim_refl.
 - move/asboolP => /nosteps_spin /Bisim_eq Hs He.
@@ -805,16 +806,171 @@ move/asboolP => [ab Hab].
   rewrite Hs.
   apply wBisim_refl.
 Qed.
+
+HB.instance Definition _ := @isMonadDelay.Build M
+  (@while) wBisim wBisim_refl wBisim_sym wBisim_trans (@fixpointE).
+
+Lemma terminatesP A (a:M A): decidable (exists c, exists m, steps m a = DNow c ).
+Proof.
+case/boolP: `[< exists c, exists m, steps m a = DNow c >].
+- move/asboolP; by left.
+- move/asboolP; by right.
+Qed.
+
+Lemma bindo A B (d: M A) (a: A): (exists n , steps n d = DNow a) -> forall  (f: A -> M B) , Oeq (DNow a >>= f)  (d >>= f).
+Proof.
+move => Hs f.
+apply/wBisms_Oeq_equ.
+by apply binds. Qed.
+
+Lemma Oeq_trans A (d1 d2 d3: M A): Oeq d1 d2 -> Oeq d2 d3 -> Oeq d1 d3.
+Proof.
+move =>  /wBisms_Oeq_equ Hd12 /wBisms_Oeq_equ Hd23.
+apply/ wBisms_Oeq_equ.
+apply: wBisim_trans.
+apply Hd12.
+apply Hd23.
+Qed.
+Lemma Oeq_sym A (d1 d2: M A): Oeq d1 d2 -> Oeq d2 d1.
+Proof.
+move => /wBisms_Oeq_equ Hd12.
+apply/wBisms_Oeq_equ.
+by rewrite wBisim_sym.
+Qed.
+Lemma Oeq_refl A (d: M A): Oeq d d.
+Proof.
+apply/wBisms_Oeq_equ. 
+apply/ wBisim_refl.
+Qed.
+
 (*hierarchy.v monad_lib. *)
+
+CoFixpoint naturality {A B C} (f: A -> M (B + A)) (g: B -> M C)(x:A):
+   Oeq ((while f x) >>= g)  (while (fun y => (f y) >>= (sum_rect (fun => M (C + A)) (M # inl \o g) (M # inr \o (@ret A )) ) ) x).
+Proof.
+rewrite whileE whileE.
+case: (terminatesP (f x)).
+- case => [b [n Hs]].
+  rewrite bindA bindA.
+  apply: Oeq_trans.
+  * apply Oeq_sym.
+    apply bindo.
+    exists n. 
+    by apply Hs.
+  * apply Oeq_sym.
+     apply: Oeq_trans.
+     ** apply Oeq_sym.
+        apply bindo.
+        exists n. 
+        by apply Hs.
+     ** case: b Hs.
+        *** (*move => b Hs.
+            rewrite bindretf bindretf //=.
+            rewrite fmapE.
+            rewrite bindretf.
+            case: (terminatesP (g b)). 
+            **** case => [c [m Hsg]].
+                 rewrite bindA.
+                 apply: Oeq_trans.
+                 ***** apply Oeq_sym.
+                       apply bindo.
+                       exists m. 
+                       by apply Hsg.
+                 ***** rewrite bindretf //= bindretf.
+                       apply Oeq_sym.
+                       apply wBisms_Oeq_equ.
+                       apply/asboolP.
+                       exists m. 
+                       by rewrite Hsg steps_now.
+            **** move=> /nosteps_spin /Bisim_eq Hsg.
+                 rewrite Hsg bindA bind_spinE.
+                 apply Oeq_refl.*) admit.
+        *** move => b Hs.
+            rewrite bindretf bindretf //= fmapE bindretf //= bindretf bindLE.
+            apply Oeq_sym.
+            apply OLater. Guarded.
+            apply naturality. 
+            Guarded.
+- move => /nosteps_spin /Bisim_eq Hsg.
+  rewrite! Hsg bindA bindA bind_spinE bind_spinE.
+  apply wBisim_refl.
+Qed.
+*)
+
+
+
 Lemma naturality {A B C} (f: A -> M (B + A)) (g: B -> M C)(x:A):
-  (while f x) >>= g ≈  while (fun y => (f y) >>= (sum_rect (fun => M (C + A)) (M # inl \o g) (M # inr \o (@ret M A )) ) ) x.
+  (while f x) >>= g ≈  while (fun y => (f y) >>= (sum_rect (fun => M (C + A)) (M # inl \o g) (M # inr \o (@ret A )) ) ) x.
+Proof.
+Show Proof.
+apply <- wBisms_Oeq_equ. Show Proof.
+move: x. Show Proof.
+cofix CIH.
+move => x.
+apply -> wBisms_Oeq_equ. Show Proof.
+rewrite whileE whileE. 
+case: (terminatesP (f x)).
+- case => [b [n Hs]].
+  rewrite bindA bindA.
+  apply: wBisim_trans.
+  + rewrite wBisim_sym.
+    apply binds.
+    exists n. by apply Hs.
+  + rewrite wBisim_sym.
+     apply: wBisim_trans.
+     * rewrite wBisim_sym.
+       apply binds.
+       exists n. 
+       by apply Hs.
+     * case: b Hs => b Hs.
+       ** (*rewrite bindretf bindretf //=.
+          rewrite fmapE.
+          rewrite bindretf.
+          case: (terminatesP (g b)). 
+          *** case => [c [m Hsg]].
+              rewrite bindA.
+              apply: wBisim_trans.
+              **** rewrite wBisim_sym.
+                   apply binds.
+                   exists m. by apply Hsg.
+              **** rewrite bindretf //= bindretf.
+                   apply/asboolP.
+                   exists m. by rewrite Hsg steps_now.
+           *** move=> /nosteps_spin /Bisim_eq Hsg.
+               rewrite Hsg bindA bind_spinE.
+               by apply wBisim_refl.*) admit.
+        ** rewrite bindretf bindretf //= fmapE bindretf //= bindretf bindLE wBisim_sym.
+           apply <- wBisms_Oeq_equ.
+           apply OLater. Guarded.
+           by apply (CIH b). Guarded.
+- move => /nosteps_spin /Bisim_eq Hsg.
+  rewrite! Hsg bindA bindA bind_spinE bind_spinE.
+  apply wBisim_refl.
+Qed.
+
+     
+      
+        
+
+
+
+    case: (g b).
+    * move => c. 
+    by rewrite bindA bindretf //= bindretf wBisim_refl.
+    * move => d.
+      rewrite bindA bindLE.
+ 
+    
+    
+  
+  
 
   Abort.
 Lemma codiagonal {A B} (f: A -> M ((B + A) + A)):
    forall (x:A),while ((Delay # ((sum_rect (fun => (B + A)%type) idfun inr)))  \o f ) x  ≈ while (while f) x. Abort.
 
 Lemma uniform {A B C} (f:A -> Delay(B + A)) (g: C -> Delay (B + C)) (h: C -> Delay A) :
-  forall (z:C),(h z) >>= f  ≈ ( (g z) >>= (sum_function ((Delay # inl) \o (fun (y:B) => DNow y)(*ret*)) ((Delay # inr) \o h ))) -> forall (z:C), (h z) >>= (while f)  ≈  while g z. Abort.
+  forall (z:C),(h z) >>= f  ≈ ( (g z) >>= (sum_functin ((Delay # inl) \o (fun (y:B) => DNow y)(*ret*)) ((Delay # inr) \o h ))) -> forall (z:C), (h z) >>= (while f)  ≈  while g z. Abort.
 End wBisim.
 End delayops.
 
