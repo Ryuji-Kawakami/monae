@@ -500,76 +500,69 @@ split.
     apply H.
     by apply IH.    
 Qed.
-Definition wBisims (A: UU0)  (d1 d2: M A): Prop :=
-  exists (n:nat), (steps n d1) = (steps n d2).
-Lemma wBisim_refl A (d : M A): wBisims d d.
+
+Section wBisim.
+Import boolp.
+Definition wBisim (A: UU0)  (d1 d2: M A): bool :=
+  `[< exists n, steps n d1 = steps n d2 >].
+
+Print reflexive.
+Notation "a '≈' b" := (wBisim a b).
+Lemma wBisim_refl A : reflexive (@wBisim A).
+Proof. rewrite  /reflexive /wBisim . move => x. apply /asboolP. by exists 0. Qed.
+Lemma wBisim_sym A (d1 d2 : M A) : d1 ≈ d2 -> d2 ≈ d1.
+Proof. move => /asboolP [n Hs]. apply /asboolP. by exists n . Qed.
+Lemma wBisim_trans A (d1 d2 d3: M A) : d1 ≈ d2 -> d2 ≈ d3 -> d1 ≈ d3.
 Proof.
-by exists 0. Qed.
-Lemma wBisims_sym A (d1 d2 : M A) : wBisims d1 d2 -> wBisims d2 d1 .
-move => [n Hs].
-by exists n. Qed.
-Lemma wBisims_trans A (d1 d2 d3: M A) : wBisims d1 d2 -> wBisims d2 d3 -> wBisims d1 d3.
-Proof.
-move => [n Hs1].
-move => [m Hs2].
+move => /asboolP [n Hs1].
+move => /asboolP [m Hs2].
+apply /asboolP.
 exists (n + m).
 by rewrite stepsD Hs1 addnC stepsD -Hs2 -stepsD -stepsD addnC.
 Qed.
-
-Theorem wBisms_Oeq_equ A (d1 d2 : M A) : wBisims d1 d2 <-> Oeq d1 d2. 
+Theorem wBisms_Oeq_equ A (d1 d2 : M A) :d1 ≈ d2 <-> Oeq d1 d2. 
 Proof.
 Import boolp. 
 split.
-case/boolP: `[< exists a, exists n, steps n d1 = DNow a >].
-move/asboolP => [a Ha]. 
-case/boolP: `[< exists a, exists n, steps n d2 = DNow a >]. 
-move/asboolP => [b Hb]. 
-- move => [n Hw].
-  have: DNow a = DNow b.
-  inversion Ha.
-  inversion Hb.
-  have: steps (n+x+x0) d1 = steps (n+x+x0) d2.
-  rewrite !stepsD.
-  by rewrite Hw.
-  have: steps (n + x + x0) d1 = DNow a.
-  apply monotonicity_steps with(n := x).
-  by [].
-  rewrite addnACl.
-  apply leq_addr.
-  have: steps (n + x + x0) d2 = DNow b.
-  apply monotonicity_steps with(n := x0).
-  by []. Search (_ + _ + _).
-  rewrite addnCAC -addnA. 
-  apply leq_addr.
-  move => Hd2 Hd1 Hdd.
-  by rewrite -Hd1 -Hd2.
-  move => Hab.
-  rewrite -Hab in Hb.
-  apply Terminates_steps in Ha.
-  apply Terminates_steps in Hb.
-  apply (OTerminate Ha Hb).
-- move/asboolP => /nosteps_spin Hs. 
-  apply Bisim_eq in Hs.
-  rewrite Hs.
-  move=> [m Hw].
-  rewrite stepsn_spin in Hw.
-  apply (steps_Oeq d1 (@spin A) m).
-  rewrite Hw.
-  apply Oeqspin.
-- case/boolP: `[< exists a, exists n, steps n d2 = DNow a >]. 
-  move/asboolP => [b Hb]. 
-  + move/asboolP => /nosteps_spin Hs. 
-  apply Bisim_eq in Hs.
-  rewrite Hs.
-  move=> [m Hw].
-  rewrite stepsn_spin in Hw.
-  rewrite Hw.
-  apply (steps_Oeq d2 d2  m).
-  apply ReflOeq.
-  + move/asboolP => /nosteps_spin /Bisim_eq Hd2 /asboolP /nosteps_spin /Bisim_eq Hd1.
-    move => Hw. 
-    rewrite Hd1 Hd2.
-    apply ReflOeq.
+- case/boolP: `[< exists a, exists n, steps n d1 = DNow a >].
+  + move/asboolP => [a Ha]. 
+    case/boolP: `[< exists a, exists n, steps n d2 = DNow a >]. 
+    * move/asboolP => [b Hb]  /asboolP [n Hw]. 
+      have Hab: DNow a = DNow b.
+        case: Ha => n1 Hn1. 
+        case: Hb => n2 Hn2.
+        have: steps (n+n1+n2) d1 = steps (n+n1+n2) d2.
+          by rewrite !stepsD Hw.
+        have->: steps (n + n1 + n2) d1 = DNow a.
+          apply (monotonicity_steps Hn1). 
+          by rewrite addnACl leq_addr.
+        have->//: steps (n + n1 + n2) d2 = DNow b.
+        apply (monotonicity_steps Hn2).
+        by rewrite addnCAC -addnA leq_addr.
+      rewrite -Hab in Hb.
+      move/Terminates_steps in Ha.
+      move/Terminates_steps in Hb.
+      by apply (OTerminate Ha Hb).
+    * move/asboolP => /nosteps_spin Hs. 
+      move/Bisim_eq in Hs.
+      rewrite Hs.
+      move=> /asboolP [m Hw].
+      rewrite stepsn_spin in Hw.
+      apply (steps_Oeq d1 (@spin A) m).
+      rewrite Hw.
+      apply Oeqspin.
+  + case/boolP: `[< exists a, exists n, steps n d2 = DNow a >]. 
+    * move/asboolP => [b Hb] /asboolP /nosteps_spin Hs. 
+      move/ Bisim_eq in Hs.
+      rewrite Hs.
+      move=> /asboolP [m Hw].
+      rewrite stepsn_spin in Hw.
+      rewrite Hw.
+      apply (steps_Oeq d2 d2  m).
+      by apply ReflOeq.
+    * move/asboolP => /nosteps_spin /Bisim_eq Hd2 /asboolP /nosteps_spin /Bisim_eq Hd1 Hw.
+      rewrite Hd1 Hd2.
+      by apply ReflOeq.
 - case/boolP: `[< exists a, exists n, steps n d1 = DNow a >].
   move/asboolP => [a [n Ha]]. 
   case/boolP: `[< exists a, exists n, steps n d2 = DNow a >]. 
@@ -592,6 +585,7 @@ move/asboolP => [b Hb].
     by inversion H0.
     move => Hab.
     rewrite Hab in Hd1.
+    apply /asboolP.
     exists (n + m). 
     by rewrite Hd1 Hd2. 
   + move/asboolP => /nosteps_spin /Bisim_eq Hd2.
@@ -606,16 +600,14 @@ move/asboolP => [b Hb].
     by apply not_Oeq_spin_now in Ho.
   + move/asboolP => /nosteps_spin /Bisim_eq Hd2 /asboolP /nosteps_spin /Bisim_eq Hd1 Ho.
     rewrite Hd1 Hd2.
+    apply /asboolP.
     by exists 0.
 Qed.    
-
-
-
-Lemma steps_bind {A B} (n:nat) (m: M A) (f: A -> M B) : wBisims (steps n (m >>= f)) (m >>= ((steps n) \o f)).
+Lemma steps_bind {A B} (n:nat) (m: M A) (f: A -> M B) : steps n (m >>= f) ≈  m >>= ((steps n) \o f).
 Abort.
-Lemma steps_ret {A} (n:nat) (a: A) : wBisims (steps n (@ret M A a)) (@ret M A a). 
+Lemma steps_ret {A} (n:nat) (a: A) : steps n (@ret M A a) ≈ @ret M A a. 
 Abort.
-Lemma steps_monotonisity {A} (n: nat) (d: Delay A):wBisims (steps n d )d.
+Lemma steps_monotonisity {A} (n: nat) (d: Delay A):steps n d  ≈ d.
 Abort.
 CoFixpoint while {A B} (body: A -> M(B + A)) :A -> M B :=
       fun a => bind (body a) (fun ab => match ab with
@@ -708,7 +700,7 @@ case: (f a).
     apply CIH.
     rewrite Hd2 //=.  
 Qed. 
-Lemma binds A B (d: M A) (a: A): (exists n , steps n d = DNow a) -> forall  (f: A -> M B) , wBisims (DNow a >>= f) ( d >>= f).
+Lemma binds A B (d: M A) (a: A): (exists n , steps n d = DNow a) -> forall  (f: A -> M B) , DNow a >>= f ≈  d >>= f.
 Proof.
 move => [n Hs] f .
 move: d Hs.
@@ -728,18 +720,18 @@ elim: n.
     apply SymOeq.
     apply->  onesteps_Oeq.
     apply wBisms_Oeq_equ.
-    apply wBisims_sym.
+    apply wBisim_sym.
     by apply IH. 
 Qed.
-Lemma bind_steps A B (d1: M A) : (exists n a, ( steps n d1 = DNow a)) -> forall  (f: A -> M B) (d2: M B) (m: nat), wBisims (steps m d1 >>= f) d2 -> wBisims (d1 >>= f) d2. 
+Lemma bind_steps A B (d1: M A) : (exists n a, ( steps n d1 = DNow a)) -> forall  (f: A -> M B) (d2: M B) (m: nat), steps m d1 >>= f ≈ d2 -> d1 >>= f ≈ d2. 
 Proof.
 move => [n [a Hs]] f d2 m Hw.
-have: wBisims (d1 >>= f) (DNow a >>= f).
-apply wBisims_sym.
+have: d1 >>= f ≈ DNow a >>= f.
+apply wBisim_sym.
 apply binds.
 by exists n.
 move => Hn.
-have: wBisims (DNow a >>= f) (steps m d1 >>= f).  
+have: DNow a >>= f ≈ steps m d1 >>= f.  
 apply binds.
 exists n.
 rewrite -stepsD.
@@ -747,11 +739,11 @@ apply monotonicity_steps with (n := n) .
 by [].
 apply leq_addl.
 move => Hds.
-apply (wBisims_trans Hn).
-apply (wBisims_trans Hds).
+apply (wBisim_trans Hn).
+apply (wBisim_trans Hds).
 apply Hw.
 Qed.
-Lemma bind_steps_spin A B (d1: M A) : ~(exists n a, ( steps n d1 = DNow a)) -> forall  (f: A -> M B) (d2: M B) (m: nat), wBisims (steps m d1 >>= f) d2 -> wBisims (d1 >>= f) d2. 
+Lemma bind_steps_spin A B (d1: M A) : ~(exists n a, ( steps n d1 = DNow a)) -> forall  (f: A -> M B) (d2: M B) (m: nat), steps m d1 >>= f ≈ d2 -> d1 >>= f≈ d2. 
 Proof.
 move => Hs.
 have: ~(exists a n , ( steps n d1 = DNow a)) .
@@ -763,7 +755,7 @@ rewrite Ha.
 move => f d2 m.
 by rewrite stepsn_spin bind_spinE.
 Qed.
-Lemma wBisims_later  (A: Type) (d1 d2: M A): wBisims ( DLater d1) d2 <-> wBisims d1 d2. 
+Lemma wBisims_later  (A: Type) (d1 d2: M A): DLater d1 ≈ d2 <->  d1 ≈ d2. 
 Proof.
 split.
 move =>/wBisms_Oeq_equ Hd.
@@ -774,9 +766,8 @@ apply wBisms_Oeq_equ.
 by apply onesteps_Oeq in H.
 Qed.
 (* the next four conditions derived from Complete Elgot monads *)
-Lemma fixpoint {A B} (f: A -> M (B + A)):forall (a:A), wBisims (while f a) ((f a) >>= (sum_rect (fun => M B ) (@DNow B ) (while f))) .
+Lemma fixpointE {A B} (f: A -> M (B + A)):forall (a:A), while f a ≈ (f a) >>= (sum_rect (fun => M B ) (@DNow B ) (while f)) .
 Proof.
-Import boolp. 
 move => a.
 case/boolP: `[< exists b, exists n, steps n (while f a) = DNow b >].
 move/asboolP => [b Hb].
@@ -792,7 +783,7 @@ move/asboolP => [ab Hab].
   apply bind_steps with (m := x). 
   apply H.
 - rewrite H0 bindNE.
-  apply wBisims_sym.
+  apply wBisim_sym.
   apply bind_steps with (m:= x). by [].
   rewrite H0. 
   case: ab Hab H H0. 
@@ -801,7 +792,7 @@ move/asboolP => [ab Hab].
     apply wBisim_refl.
   + move => a2 Hab H H0. 
     rewrite bindNE //=. 
-    apply wBisims_sym. 
+    apply wBisim_sym. 
     apply wBisims_later.
     apply wBisim_refl.
 - move/asboolP => /nosteps_spin /Bisim_eq Hs He.
@@ -814,12 +805,17 @@ move/asboolP => [ab Hab].
   rewrite Hs.
   apply wBisim_refl.
 Qed.
-Lemma naturality {A B C} (f: A -> M (B + A)) (g: B -> M C):
- forall (x:A), wBisims ((while f x) >>= g) ( while (fun x => (f x) >>= (sum_rect (fun => M (C + A)) (Delay # inl \o g) (Delay # inr \o (@DNow A)) ) ) x) .  Abort.
-Lemma codiagnal {A B} (f: A -> M ((B + A) + A)):
-   forall (x:A), wBisims (while ((Delay # ((sum_function idfun inr)))  \o f ) x) (while (while f) x). Abort.
+(*hierarchy.v monad_lib. *)
+Lemma naturality {A B C} (f: A -> M (B + A)) (g: B -> M C)(x:A):
+  (while f x) >>= g ≈  while (fun y => (f y) >>= (sum_rect (fun => M (C + A)) (M # inl \o g) (M # inr \o (@ret M A )) ) ) x.
+
+  Abort.
+Lemma codiagonal {A B} (f: A -> M ((B + A) + A)):
+   forall (x:A),while ((Delay # ((sum_rect (fun => (B + A)%type) idfun inr)))  \o f ) x  ≈ while (while f) x. Abort.
+
 Lemma uniform {A B C} (f:A -> Delay(B + A)) (g: C -> Delay (B + C)) (h: C -> Delay A) :
-  forall (z:C), wBisims ((h z) >>= f) (( (g z) >>= (sum_function ((Delay # inl) \o (fun (y:B) => DNow y)(*ret*)) ((Delay # inr) \o h )))) -> forall (z:C), wBisims ((h z) >>= (while f)) ( while g z). Abort.
+  forall (z:C),(h z) >>= f  ≈ ( (g z) >>= (sum_function ((Delay # inl) \o (fun (y:B) => DNow y)(*ret*)) ((Delay # inr) \o h ))) -> forall (z:C), (h z) >>= (while f)  ≈  while g z. Abort.
+End wBisim.
 End delayops.
 
 Section delayops_examples.
@@ -833,22 +829,22 @@ Definition fact_body: nat * nat -> M (nat + nat*nat) := fun (a: nat * nat) =>
                                              |(S n', a2) => ret _ (inr (n', a2 * (S n') ))
                                             end .
 Definition factdelay := fun (nm: nat*nat) => while fact_body nm .
-Lemma eq_fact_factdelay :forall n m, wBisims (factdelay (n, m)) (@ret M nat (m * fact n)).
+Lemma eq_fact_factdelay :forall n m, wBisim (factdelay (n, m)) (@ret M nat (m * fact n)).
 move => n.
 rewrite  /factdelay.
 elim: n.
 - move => m.
-  eapply wBisims_trans.
-  apply fixpoint.
+  apply: wBisim_trans.
+  apply: fixpointE.
   simpl.
-  rewrite bindNE(*bind_ret*) muln1 //=.
+  rewrite bindretf(*bind_ret*) muln1 //=.
   apply wBisim_refl.
 - move => n IH m.
-  eapply wBisims_trans.
-  apply fixpoint.
+  eapply wBisim_trans.
+  apply fixpointE.
   simpl.
-  rewrite bindNE (*bind_ret*) //=.
-  eapply wBisims_trans. 
+  rewrite bindretf (*bind_ret*) //=.
+  eapply wBisim_trans. 
   apply IH. 
   rewrite mulnA.
   apply wBisim_refl.
