@@ -115,6 +115,8 @@ Reserved Notation "m >> f" (at level 49).
 Reserved Notation "'fmap' f" (at level 4).
 Reserved Notation "x '[~]' y" (at level 50).
 Reserved Notation "mx <| p |> my" (format "mx  <| p |>  my", at level 49).
+Reserved Notation "a '≈' b" (at level 70).
+
 
 Notation "f ~~> g" := (forall A, f A -> g A)
   (at level 51, only parsing) : monae_scope.
@@ -873,6 +875,58 @@ HB.mixin Record isMonadExcept (M : UU0 -> UU0) of MonadFail M := {
 HB.structure Definition MonadExcept := {M of isMonadExcept M & }.
 
 Arguments catch {_} {_}.
+
+
+
+HB.mixin Record isMonadDelay (M : UU0 -> UU0) of Monad M := {
+  while : forall {A B : UU0}, (A -> M(B + A)%type) -> A ->M B;
+  wBisim: forall {A : UU0}, M A -> M A -> bool;
+  wBisim_refl: forall A, reflexive (@wBisim A);
+  wBisim_sym: forall A, symmetric (@wBisim A);
+  wBisim_trans: forall A, transitive (@wBisim A);
+  fixpointE: forall (A B : UU0) (f: A -> M (B + A)%type) (a: A),
+  wBisim (while f a) ((f a) >>= (sum_rect (fun => M B ) (@ret M B) (while f))) }.
+
+#[short(type=delayMonad)]
+HB.structure Definition MonadDelay := {M of isMonadDelay M & }.
+
+Notation "a '≈' b" := (wBisim _ a b).
+
+Section DelayExample.
+Variable M : delayMonad.
+Fixpoint fact (n:nat) :nat := match n with 
+                          |O => 1
+                          |S n' => n * fact n'
+                          end.
+Definition fact_body: nat * nat -> M (nat + nat*nat)%type := fun (a: nat * nat) =>
+                                            match a with
+                                            |(O, a2) => ret _ (inl a2)
+                                             |(S n', a2) => ret _ (inr (n', a2 * (S n') ))
+                                            end .
+Definition factdelay := fun (nm: nat*nat) => while _ _ fact_body nm .
+Lemma eq_fact_factdelay :forall n m, factdelay (n, m)  ≈  ret _ (m * fact n).
+Proof.
+move => n.
+rewrite  /factdelay.
+elim: n.
+- move => m.
+  apply: wBisim_trans.
+  apply: fixpointE.
+  simpl.
+  rewrite bindretf muln1 //=.
+  apply wBisim_refl.
+- move => n IH m.
+  eapply wBisim_trans.
+  apply fixpointE.
+  simpl.
+  rewrite bindretf (*bind_ret*) //=.
+  eapply wBisim_trans. 
+  apply IH. 
+  rewrite mulnA.
+  apply wBisim_refl.
+Qed.
+
+End DelayExample.
 
 HB.mixin Record isMonadContinuation (M : UU0 -> UU0) of Monad M := {
 (* NB: interface is wip *)
