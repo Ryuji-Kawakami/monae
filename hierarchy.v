@@ -916,20 +916,17 @@ elim: n.
 - move => m.
   apply: wBisim_trans.
   apply: fixpointE.
-  simpl.
-  rewrite bindretf muln1 //=.
-  apply wBisim_refl.
+  rewrite //= bindretf muln1 //=.
+  by apply wBisim_refl.
 - move => n IH m.
   eapply wBisim_trans.
-  apply fixpointE.
-  simpl.
-  rewrite bindretf //=.
-  eapply wBisim_trans. 
-  apply IH. 
-  rewrite mulnA.
-  apply wBisim_refl.
+  + apply fixpointE.
+    rewrite //= bindretf //=.
+    eapply wBisim_trans. 
+    * apply IH. 
+      rewrite mulnA.
+      by apply wBisim_refl.
 Qed.
-
 Definition collatzm_body (m:nat) (n:nat) : M (nat + nat)%type :=
   if n == 1 then ret _ (inl m)
   else if n %%2 == 0 then ret _ (inr (n./2))
@@ -942,20 +939,19 @@ move => m n p.
 rewrite /collatzm /delaymul.
 apply: wBisim_trans.
 - by apply naturalityE.
-- have Hb: forall y, collatzm_body m y >>= (sum_rect (fun=> M (nat + nat)%type) (M # inl \o (fun n0 : nat => Ret (p * n0)))  (M # inr \o Ret)) = collatzm_body (p * m) y.
-  move => y.
-  case_eq (y == 1) => Hs.
-  + by rewrite/collatzm_body Hs bindretf //= fmapE bindretf //=.
-  + rewrite/collatzm_body Hs.
-    case_eq (y %% 2 == 0) => He.
-    * by rewrite bindretf //= fmapE bindretf //=.
-    * by rewrite bindretf //= fmapE bindretf //=.
-(*
-have Hb: (fun y : nat => collatzm_body m y >>= (sum_rect (fun=> M (nat + nat)%type) (M # inl \o (fun n0 : nat => Ret (p * n0)))  (M # inr \o Ret))) = collatzm_body (p * m).
-    admit.
-  rewrite Hb.
-  by apply wBisim_refl.*)
-Abort.
+- set x := (x in while _ _ x).
+  set y := collatzm_body (p*m).
+  have <-: x = y.
+    apply boolp.funext => q.
+    subst x y. 
+    case_eq (q == 1) => Hs.
+    + by rewrite /collatzm_body Hs bindretf //= fmapE bindretf //=.
+    + rewrite/collatzm_body Hs.
+      case_eq (q %% 2 == 0) => He.
+      * by rewrite bindretf //= fmapE bindretf //=.
+      * by rewrite bindretf //= fmapE bindretf //=.
+  by apply wBisim_refl.
+Qed.
 Definition minus1_body (nm: nat*nat)  :M ((nat + nat*nat) + nat*nat)%type:= match nm with
                                                                 |(O, m) => match m with
                                                                          |O => ret _ (inl (inl O))
@@ -979,9 +975,12 @@ rewrite/minus1 /minus2.
 apply: wBisim_trans.
 - rewrite wBisim_sym.
   apply codiagonalE.
-  have Hm:forall (nm: nat * nat), (M # sum_rect (fun=> (nat + nat * nat)%type) idfun inr \o minus1_body) nm = minus2_body nm.
+- set x := M # _ \o _.
+  set y := minus2_body.
+  have <-: x = y .
+  subst x y.
+  apply boolp.funext.
   move => [n m].
-  rewrite/minus2_body.
   case: n.
   + case: m => //= .
      * by rewrite fmapE bindretf.
@@ -989,13 +988,8 @@ apply: wBisim_trans.
        by rewrite fmapE bindretf.
   + move => n //=.  
     by rewrite fmapE bindretf.
-
-(*
-  have Hm: M # sum_rect (fun=> (nat + nat * nat)%type) idfun inr \o minus1_body = minus2_body.
-    admit.
-  rewrite Hm. 
-  apply wBisim_refl. *)
-Abort.
+by apply wBisim_refl.
+Qed.
 End DelayExample.
 
 HB.mixin Record isMonadContinuation (M : UU0 -> UU0) of Monad M := {

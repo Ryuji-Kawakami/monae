@@ -808,9 +808,6 @@ move/asboolP => [ab Hab].
   apply wBisim_refl.
 Qed.
 
-HB.instance Definition _ := @isMonadDelay.Build M
-  (@while) wBisim wBisim_refl wBisim_sym wBisim_trans (@fixpointE).
-
 Lemma terminatesP A (a:M A): decidable (exists c, exists m, steps m a = DNow c ).
 Proof.
 case/boolP: `[< exists c, exists m, steps m a = DNow c >].
@@ -889,7 +886,7 @@ case: d.
   rewrite -bindA -bindA. 
   by apply naturality'.
 Qed.
-Lemma naturality {A B C} (f: A -> M (B + A)) (g: B -> M C)(a:A):
+Lemma naturalityE {A B C} (f: A -> M (B + A)) (g: B -> M C)(a:A):
    (while f a) >>= g   ≈  while (fun y => (f y) >>= (sum_rect (fun => M (C + A)) (M # inl \o g) (M # inr \o (@ret A )) ) ) a.
 Proof. by apply wBisms_Oeq_equ; rewrite whileE whileE; apply naturality'. Qed.
 
@@ -929,13 +926,16 @@ case: d.
   by apply codiagonal'.
 Qed.
 
-Lemma codiagonal {A B} (f: A -> M ((B + A) + A))(a:A):
+Lemma codiagonalE {A B} (f: A -> M ((B + A) + A))(a:A):
    while ((Delay # ((sum_rect (fun => (B + A)%type) idfun inr)))  \o f ) a  ≈ while (while f) a. 
 Proof. by apply wBisms_Oeq_equ; rewrite whileE whileE whileE //= fmapE; apply codiagonal'. Qed.
 
 (*
 Lemma uniform {A B C} (f:A -> Delay(B + A)) (g: C -> Delay (B + C)) (h: C -> Delay A) :
   forall (z:C),(h z) >>= f  ≈ ( (g z) >>= (sum_functin ((Delay # inl) \o (fun (y:B) => DNow y)(*ret*)) ((Delay # inr) \o h ))) -> forall (z:C), (h z) >>= (while f)  ≈  while g z. Abort.*)
+HB.instance Definition _ := @isMonadDelay.Build M
+  (@while) wBisim wBisim_refl wBisim_sym wBisim_trans (@fixpointE) (@naturalityE) (@codiagonalE).
+
 End wBisim.
 End delayops.
 
