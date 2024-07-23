@@ -923,12 +923,38 @@ elim: n.
   eapply wBisim_trans.
   apply fixpointE.
   simpl.
-  rewrite bindretf (*bind_ret*) //=.
+  rewrite bindretf //=.
   eapply wBisim_trans. 
   apply IH. 
   rewrite mulnA.
   apply wBisim_refl.
 Qed.
+(*
+Definition collatzm_body (m:nat) (n:nat) : M (nat + nat)%type :=
+  if n == 1 then @ret M (inl m)
+  else if (n %%2 == 0) then @ret M (inr (n./2))
+       else @ret M (inr (3*n + 1)).
+Definition collatzm (m:nat) := while (collatzm_body m).
+Definition delaymul (m:nat) (d: M nat) :M nat := d >>= (fun n => ret _ (m * n)).
+Lemma collatzm_mul : forall (m n p: nat), wBisim  (delaymul p (collatzm m n)) (collatzm (p * m ) n ). Abort. *)
+Definition minus1_body (nm: nat*nat)  :M ((nat + nat*nat) + nat*nat)%type:= match nm with
+                                                                |(O, m) => match m with
+                                                                         |O => ret _ (inl (inl O))
+                                                                         |S m' => ret _ (inl (inr (m', m')))
+                                                                         end
+                                                                |(S n', m) => ret _ (inr (n', m ))
+                                                                end.
+Definition minus1 := fun nm => while _ _ (while _ _ minus1_body) nm.
+Definition minus2_body (nm: nat*nat) : M (nat + nat*nat)%type := match nm with
+                                                      |(O,m) => match m with
+                                                                |O => ret _ (inl O)
+                                                                |S m' => ret _ (inr (m', m'))
+                                                                end
+                                                      |(S n', m) => ret _ (inr (n',m))
+                                                      end.
+Definition minus2 := fun nm => while _ _  minus2_body nm.
+Lemma eq_minus : forall (nm: nat*nat), minus1 nm  ≈  minus2 nm. Abort.
+
 
 End DelayExample.
 

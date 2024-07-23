@@ -933,24 +933,25 @@ Lemma codiagonal {A B} (f: A -> M ((B + A) + A))(a:A):
    while ((Delay # ((sum_rect (fun => (B + A)%type) idfun inr)))  \o f ) a  ≈ while (while f) a. 
 Proof. by apply wBisms_Oeq_equ; rewrite whileE whileE whileE //= fmapE; apply codiagonal'. Qed.
 
-
+(*
 Lemma uniform {A B C} (f:A -> Delay(B + A)) (g: C -> Delay (B + C)) (h: C -> Delay A) :
-  forall (z:C),(h z) >>= f  ≈ ( (g z) >>= (sum_functin ((Delay # inl) \o (fun (y:B) => DNow y)(*ret*)) ((Delay # inr) \o h ))) -> forall (z:C), (h z) >>= (while f)  ≈  while g z. Abort.
+  forall (z:C),(h z) >>= f  ≈ ( (g z) >>= (sum_functin ((Delay # inl) \o (fun (y:B) => DNow y)(*ret*)) ((Delay # inr) \o h ))) -> forall (z:C), (h z) >>= (while f)  ≈  while g z. Abort.*)
 End wBisim.
 End delayops.
 
 Section delayops_examples.
+Local Notation M := Delay.
 Fixpoint fact (n:nat) :nat := match n with 
                           |O => 1
                           |S n' => n * fact n'
                           end.
 Definition fact_body: nat * nat -> M (nat + nat*nat) := fun (a: nat * nat) =>
                                             match a with
-                                            |(O, a2) => ret _ (inl a2)
-                                             |(S n', a2) => ret _ (inr (n', a2 * (S n') ))
+                                            |(O, a2) => ret  (inl a2)
+                                             |(S n', a2) => ret (inr (n', a2 * (S n') ))
                                             end .
 Definition factdelay := fun (nm: nat*nat) => while fact_body nm .
-Lemma eq_fact_factdelay :forall n m, wBisim (factdelay (n, m)) (@ret M nat (m * fact n)).
+Lemma eq_fact_factdelay :forall n m, wBisim (factdelay (n, m)) (@ret nat (m * fact n)).
 move => n.
 rewrite  /factdelay.
 elim: n.
@@ -971,26 +972,26 @@ elim: n.
   apply wBisim_refl.
 Qed.
 Definition collatzm_body (m:nat) (n:nat) :=
-  if n == 1 then DNow (inl m)
-  else if (n %%2 == 0) then ret _ (inr (n./2))
-       else ret _ (inr (3*n + 1)).
+  if n == 1 then ret (inl m)
+  else if (n %%2 == 0) then ret (inr (n./2))
+       else ret (inr (3*n + 1)).
 Definition collatzm (m:nat) := while (collatzm_body m).
-Definition delaymul (m:nat) (d: M nat) :M nat := d >>= (fun n => ret _ (m * n)).
+Definition delaymul (m:nat) (d: M nat) :M nat := d >>= (fun n => ret (m * n)).
 Lemma collatzm_mul : forall (m n p: nat), wBisim  (delaymul p (collatzm m n)) (collatzm (p * m ) n ). Abort.
 Definition minus1_body (nm: nat*nat)  :M ((nat + nat*nat) + nat*nat):= match nm with
                                                                 |(O, m) => match m with
-                                                                         |O => ret _ (inl (inl O))
-                                                                         |S m' => ret _ (inl (inr (m', m')))
+                                                                         |O => ret (inl (inl O))
+                                                                         |S m' => ret (inl (inr (m', m')))
                                                                          end
-                                                                |(S n', m) => ret _ (inr (n', m ))
+                                                                |(S n', m) => ret (inr (n', m ))
                                                                 end.
 Definition minus1 := while (while minus1_body).
 Definition minus2_body (nm: nat*nat) : Delay (nat + nat*nat) := match nm with
                                                       |(O,m) => match m with
-                                                                |O => ret _ (inl O)
-                                                                |S m' => ret _ (inr (m', m'))
+                                                                |O => ret (inl O)
+                                                                |S m' => ret (inr (m', m'))
                                                                 end
-                                                      |(S n', m) => ret _ (inr (n',m))
+                                                      |(S n', m) => ret (inr (n',m))
                                                       end.
 Definition minus2 := while minus2_body.
 Lemma eq_minus : forall (nm: nat*nat), wBisim (minus1 nm) (minus2 nm). Abort.
