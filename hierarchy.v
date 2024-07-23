@@ -885,7 +885,11 @@ HB.mixin Record isMonadDelay (M : UU0 -> UU0) of Monad M := {
   wBisim_sym: forall A, symmetric (@wBisim A);
   wBisim_trans: forall A, transitive (@wBisim A);
   fixpointE: forall (A B : UU0) (f: A -> M (B + A)%type) (a: A),
-  wBisim (while f a) ((f a) >>= (sum_rect (fun => M B ) (@ret M B) (while f))) }.
+  wBisim (while f a) ((f a) >>= (sum_rect (fun => M B ) (@ret M B) (while f)));
+  naturality: forall (A B C : UU0) (f: A -> M (B + A)%type) (g: B -> M C) (a: A),
+  wBisim ((while f a) >>= g)(while (fun y => (f y) >>= (sum_rect (fun => M (C + A)%type) (M # inl \o g) (M # inr \o (@ret M A )) ) ) a);
+  codiagonal:forall (A B : UU0) (f: A -> M ((B + A) + A)%type) (a: A),
+  wBisim (while ((M # ((sum_rect (fun => (B + A)%type) idfun inr)))  \o f ) a) (while (while f) a)}.
 
 #[short(type=delayMonad)]
 HB.structure Definition MonadDelay := {M of isMonadDelay M & }.

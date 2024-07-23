@@ -431,6 +431,7 @@ move => He.
 by apply nonsteps_spin in He.
 Qed.
 
+
 Lemma onesteps_Oeq A (d1 d2: M A) :  Oeq d1 d2 <-> Oeq (DLater d1) d2 .
 Proof.
 split.
@@ -844,130 +845,94 @@ apply/ wBisim_refl.
 Qed.
 
 (*hierarchy.v monad_lib. *)
-
-CoFixpoint naturality {A B C} (f: A -> M (B + A)) (g: B -> M C)(x:A):
-   Oeq ((while f x) >>= g)  (while (fun y => (f y) >>= (sum_rect (fun => M (C + A)) (M # inl \o g) (M # inr \o (@ret A )) ) ) x).
+CoFixpoint naturality' {A B C} (f: A -> M (B + A)) (g: B -> M C)(d: M (B + A)):
+Oeq ((d >>= (fun ab : B + A => match ab with
+                                   | inl b => DNow b
+                                   | inr a => DLater (while f a)
+                                   end)) >>= g)
+    ((d >>= sum_rect (fun=> M (C + A)) (M # inl \o g) (M # inr \o ret (A:=A))) >>=
+     (fun ab : C + A => match ab with
+                        | inl b => DNow b
+                        | inr a => DLater (while (fun y : A => f y >>= sum_rect (fun=> M (C + A)) (M # inl \o g) (M # inr \o ret (A:=A))) a)
+                        end)).
 Proof.
-rewrite whileE whileE.
-case: (terminatesP (f x)).
-- case => [b [n Hs]].
-  rewrite bindA bindA.
-  apply: Oeq_trans.
-  * apply Oeq_sym.
-    apply bindo.
-    exists n. 
-    by apply Hs.
-  * apply Oeq_sym.
-     apply: Oeq_trans.
-     ** apply Oeq_sym.
-        apply bindo.
-        exists n. 
-        by apply Hs.
-     ** case: b Hs.
-        *** (*move => b Hs.
-            rewrite bindretf bindretf //=.
-            rewrite fmapE.
-            rewrite bindretf.
-            case: (terminatesP (g b)). 
-            **** case => [c [m Hsg]].
-                 rewrite bindA.
-                 apply: Oeq_trans.
-                 ***** apply Oeq_sym.
-                       apply bindo.
-                       exists m. 
-                       by apply Hsg.
-                 ***** rewrite bindretf //= bindretf.
-                       apply Oeq_sym.
-                       apply wBisms_Oeq_equ.
-                       apply/asboolP.
-                       exists m. 
-                       by rewrite Hsg steps_now.
-            **** move=> /nosteps_spin /Bisim_eq Hsg.
-                 rewrite Hsg bindA bind_spinE.
-                 apply Oeq_refl.*) admit.
-        *** move => b Hs.
-            rewrite bindretf bindretf //= fmapE bindretf //= bindretf bindLE.
-            apply Oeq_sym.
-            apply OLater. Guarded.
-            apply naturality. 
-            Guarded.
-- move => /nosteps_spin /Bisim_eq Hsg.
-  rewrite! Hsg bindA bindA bind_spinE bind_spinE.
-  apply wBisim_refl.
+case: d.
+- move => ab.
+  case: ab.
+  + move => b.
+    rewrite bindretf bindA bindretf bindretf //= fmapE. 
+    apply wBisms_Oeq_equ.
+    case: (terminatesP (g b)).
+    * move => [c [m Hs]].
+      rewrite wBisim_sym.
+      apply: wBisim_trans.
+      ** rewrite wBisim_sym bindA.
+         apply binds.
+         exists m . 
+         by apply Hs.
+      ** rewrite bindretf //= bindretf.
+         apply/asboolP.
+         exists m.
+         rewrite steps_now.
+         by rewrite Hs.
+    * move=> /nosteps_spin /Bisim_eq Hsg.
+      rewrite Hsg bindA bind_spinE.
+      by apply wBisim_refl.
+  + move => b.
+    rewrite bindretf bindretf //= fmapE bindretf bindretf bindLE.
+    rewrite whileE whileE.
+    apply OLater.
+    by apply (naturality' A B C). 
+- move => d.
+  rewrite bindA bindA bindLE bindLE.
+  apply OLater.
+  rewrite -bindA -bindA. 
+  by apply naturality'.
 Qed.
-*)
+Lemma naturality {A B C} (f: A -> M (B + A)) (g: B -> M C)(a:A):
+   (while f a) >>= g   ≈  while (fun y => (f y) >>= (sum_rect (fun => M (C + A)) (M # inl \o g) (M # inr \o (@ret A )) ) ) a.
+Proof. by apply wBisms_Oeq_equ; rewrite whileE whileE; apply naturality'. Qed.
 
-
-
-Lemma naturality {A B C} (f: A -> M (B + A)) (g: B -> M C)(x:A):
-  (while f x) >>= g ≈  while (fun y => (f y) >>= (sum_rect (fun => M (C + A)) (M # inl \o g) (M # inr \o (@ret A )) ) ) x.
+CoFixpoint codiagonal' {A B} (f: A -> M ((B + A) + A))(d: M ((B + A) + A)):
+Oeq (( d >>= (Ret \o sum_rect (fun=> (B + A)%type) idfun inr)) >>=
+  (fun ab : B + A => match ab with
+                     | inl b => DNow b
+                     | inr a => DLater (while (M # sum_rect (fun=> (B + A)%type) idfun inr \o f) a)
+                     end))
+  ((d >>= (fun ab : B + A + A => match ab with
+                                    | inl b => DNow b
+                                    | inr a => DLater (while f a)
+                                    end)) >>= (fun ab : B + A => match ab with
+                                                                 | inl b => DNow b
+                                                                 | inr a => DLater (while (while f) a)
+                                                                 end)).
 Proof.
-Show Proof.
-apply <- wBisms_Oeq_equ. Show Proof.
-move: x. Show Proof.
-cofix CIH.
-move => x.
-apply -> wBisms_Oeq_equ. Show Proof.
-rewrite whileE whileE. 
-case: (terminatesP (f x)).
-- case => [b [n Hs]].
-  rewrite bindA bindA.
-  apply: wBisim_trans.
-  + rewrite wBisim_sym.
-    apply binds.
-    exists n. by apply Hs.
-  + rewrite wBisim_sym.
-     apply: wBisim_trans.
-     * rewrite wBisim_sym.
-       apply binds.
-       exists n. 
-       by apply Hs.
-     * case: b Hs => b Hs.
-       ** (*rewrite bindretf bindretf //=.
-          rewrite fmapE.
-          rewrite bindretf.
-          case: (terminatesP (g b)). 
-          *** case => [c [m Hsg]].
-              rewrite bindA.
-              apply: wBisim_trans.
-              **** rewrite wBisim_sym.
-                   apply binds.
-                   exists m. by apply Hsg.
-              **** rewrite bindretf //= bindretf.
-                   apply/asboolP.
-                   exists m. by rewrite Hsg steps_now.
-           *** move=> /nosteps_spin /Bisim_eq Hsg.
-               rewrite Hsg bindA bind_spinE.
-               by apply wBisim_refl.*) admit.
-        ** rewrite bindretf bindretf //= fmapE bindretf //= bindretf bindLE wBisim_sym.
-           apply <- wBisms_Oeq_equ.
-           apply OLater. Guarded.
-           by apply (CIH b). Guarded.
-- move => /nosteps_spin /Bisim_eq Hsg.
-  rewrite! Hsg bindA bindA bind_spinE bind_spinE.
-  apply wBisim_refl.
+case: d.
+- move => baa.
+  case: baa.
+  + move => ba. 
+    case: ba.
+    * move => b.
+      rewrite bindretf bindretf bindretf //= bindretf.
+      by apply Oeq_refl.
+    * move => a.
+      rewrite bindretf bindretf bindretf //= bindretf whileE whileE whileE //= fmapE.
+      apply OLater.
+      by apply codiagonal'. 
+    * move => a.
+      rewrite bindretf bindretf bindretf //= bindLE whileE whileE //= fmapE.
+      apply OLater.
+      by apply codiagonal'.
+- move => d.
+  rewrite! bindLE.
+  apply OLater.
+  by apply codiagonal'.
 Qed.
 
-     
-      
-        
+Lemma codiagonal {A B} (f: A -> M ((B + A) + A))(a:A):
+   while ((Delay # ((sum_rect (fun => (B + A)%type) idfun inr)))  \o f ) a  ≈ while (while f) a. 
+Proof. by apply wBisms_Oeq_equ; rewrite whileE whileE whileE //= fmapE; apply codiagonal'. Qed.
 
-
-
-    case: (g b).
-    * move => c. 
-    by rewrite bindA bindretf //= bindretf wBisim_refl.
-    * move => d.
-      rewrite bindA bindLE.
- 
-    
-    
-  
-  
-
-  Abort.
-Lemma codiagonal {A B} (f: A -> M ((B + A) + A)):
-   forall (x:A),while ((Delay # ((sum_rect (fun => (B + A)%type) idfun inr)))  \o f ) x  ≈ while (while f) x. Abort.
 
 Lemma uniform {A B C} (f:A -> Delay(B + A)) (g: C -> Delay (B + C)) (h: C -> Delay A) :
   forall (z:C),(h z) >>= f  ≈ ( (g z) >>= (sum_functin ((Delay # inl) \o (fun (y:B) => DNow y)(*ret*)) ((Delay # inr) \o h ))) -> forall (z:C), (h z) >>= (while f)  ≈  while g z. Abort.
