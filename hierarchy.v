@@ -886,9 +886,9 @@ HB.mixin Record isMonadDelay (M : UU0 -> UU0) of Monad M := {
   wBisim_trans: forall A, transitive (@wBisim A);
   fixpointE: forall (A B : UU0) (f: A -> M (B + A)%type) (a: A),
   wBisim (while f a) ((f a) >>= (sum_rect (fun => M B ) (@ret M B) (while f)));
-  naturality: forall (A B C : UU0) (f: A -> M (B + A)%type) (g: B -> M C) (a: A),
+  naturalityE: forall (A B C : UU0) (f: A -> M (B + A)%type) (g: B -> M C) (a: A),
   wBisim ((while f a) >>= g)(while (fun y => (f y) >>= (sum_rect (fun => M (C + A)%type) (M # inl \o g) (M # inr \o (@ret M A )) ) ) a);
-  codiagonal:forall (A B : UU0) (f: A -> M ((B + A) + A)%type) (a: A),
+  codiagonalE:forall (A B : UU0) (f: A -> M ((B + A) + A)%type) (a: A),
   wBisim (while ((M # ((sum_rect (fun => (B + A)%type) idfun inr)))  \o f ) a) (while (while f) a)}.
 
 #[short(type=delayMonad)]
@@ -929,14 +929,33 @@ elim: n.
   rewrite mulnA.
   apply wBisim_refl.
 Qed.
-(*
+
 Definition collatzm_body (m:nat) (n:nat) : M (nat + nat)%type :=
-  if n == 1 then @ret M (inl m)
-  else if (n %%2 == 0) then @ret M (inr (n./2))
-       else @ret M (inr (3*n + 1)).
-Definition collatzm (m:nat) := while (collatzm_body m).
+  if n == 1 then ret _ (inl m)
+  else if n %%2 == 0 then ret _ (inr (n./2))
+       else ret _ (inr (3 * n + 1)).
+Definition collatzm (m:nat) := fun n => while _ _ (collatzm_body m) n.
 Definition delaymul (m:nat) (d: M nat) :M nat := d >>= (fun n => ret _ (m * n)).
-Lemma collatzm_mul : forall (m n p: nat), wBisim  (delaymul p (collatzm m n)) (collatzm (p * m ) n ). Abort. *)
+Lemma collatzm_mul : forall (m n p: nat), delaymul p (collatzm m n)  ≈ collatzm (p * m ) n . 
+Proof.
+move => m n p.
+rewrite /collatzm /delaymul.
+apply: wBisim_trans.
+- by apply naturalityE.
+- have Hb: forall y, collatzm_body m y >>= (sum_rect (fun=> M (nat + nat)%type) (M # inl \o (fun n0 : nat => Ret (p * n0)))  (M # inr \o Ret)) = collatzm_body (p * m) y.
+  move => y.
+  case_eq (y == 1) => Hs.
+  + by rewrite/collatzm_body Hs bindretf //= fmapE bindretf //=.
+  + rewrite/collatzm_body Hs.
+    case_eq (y %% 2 == 0) => He.
+    * by rewrite bindretf //= fmapE bindretf //=.
+    * by rewrite bindretf //= fmapE bindretf //=.
+(*
+have Hb: (fun y : nat => collatzm_body m y >>= (sum_rect (fun=> M (nat + nat)%type) (M # inl \o (fun n0 : nat => Ret (p * n0)))  (M # inr \o Ret))) = collatzm_body (p * m).
+    admit.
+  rewrite Hb.
+  by apply wBisim_refl.*)
+Abort.
 Definition minus1_body (nm: nat*nat)  :M ((nat + nat*nat) + nat*nat)%type:= match nm with
                                                                 |(O, m) => match m with
                                                                          |O => ret _ (inl (inl O))
@@ -953,9 +972,30 @@ Definition minus2_body (nm: nat*nat) : M (nat + nat*nat)%type := match nm with
                                                       |(S n', m) => ret _ (inr (n',m))
                                                       end.
 Definition minus2 := fun nm => while _ _  minus2_body nm.
-Lemma eq_minus : forall (nm: nat*nat), minus1 nm  ≈  minus2 nm. Abort.
+Lemma eq_minus : forall (nm: nat*nat), minus1 nm  ≈  minus2 nm. 
+Proof.
+move => nm.
+rewrite/minus1 /minus2.
+apply: wBisim_trans.
+- rewrite wBisim_sym.
+  apply codiagonalE.
+  have Hm:forall (nm: nat * nat), (M # sum_rect (fun=> (nat + nat * nat)%type) idfun inr \o minus1_body) nm = minus2_body nm.
+  move => [n m].
+  rewrite/minus2_body.
+  case: n.
+  + case: m => //= .
+     * by rewrite fmapE bindretf.
+     * move => n.
+       by rewrite fmapE bindretf.
+  + move => n //=.  
+    by rewrite fmapE bindretf.
 
-
+(*
+  have Hm: M # sum_rect (fun=> (nat + nat * nat)%type) idfun inr \o minus1_body = minus2_body.
+    admit.
+  rewrite Hm. 
+  apply wBisim_refl. *)
+Abort.
 End DelayExample.
 
 HB.mixin Record isMonadContinuation (M : UU0 -> UU0) of Monad M := {
