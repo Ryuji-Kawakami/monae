@@ -889,7 +889,12 @@ HB.mixin Record isMonadDelay (M : UU0 -> UU0) of Monad M := {
   naturalityE: forall (A B C : UU0) (f: A -> M (B + A)%type) (g: B -> M C) (a: A),
   wBisim ((while f a) >>= g)(while (fun y => (f y) >>= (sum_rect (fun => M (C + A)%type) (M # inl \o g) (M # inr \o (@ret M A )) ) ) a);
   codiagonalE:forall (A B : UU0) (f: A -> M ((B + A) + A)%type) (a: A),
-  wBisim (while ((M # ((sum_rect (fun => (B + A)%type) idfun inr)))  \o f ) a) (while (while f) a)}.
+  wBisim (while ((M # ((sum_rect (fun => (B + A)%type) idfun inr)))  \o f ) a) (while (while f) a);
+  wpreserve: forall (A B : UU0) (f g: A -> M ((B + A))%type) (a: A),
+  (forall a, wBisim (f a) (g a)) -> wBisim (while f a) (while g a);
+  bpreserve: forall (A B: UU0) (f: A -> M B)(d1 d2: M A),
+  wBisim d1 d2 -> wBisim (d1 >>= f) (d2>>= f);
+}.
 
 #[short(type=delayMonad)]
 HB.structure Definition MonadDelay := {M of isMonadDelay M & }.
@@ -907,13 +912,13 @@ Definition fact_body: nat * nat -> M (nat + nat*nat)%type := fun (a: nat * nat) 
                                             |(O, a2) => ret _ (inl a2)
                                              |(S n', a2) => ret _ (inr (n', a2 * (S n') ))
                                             end .
-Definition factdelay := fun (nm: nat*nat) => while _ _ fact_body nm .
-Lemma eq_fact_factdelay :forall n m, factdelay (n, m)  ≈  ret _ (m * fact n).
+Definition factdelay := fun (nm:nat*nat) => while _ _ fact_body nm .
+Lemma eq_fact_factdelay :forall n m, factdelay (n,m)  ≈  ret _ (m * fact n).
 Proof.
 move => n.
-rewrite  /factdelay.
+rewrite/factdelay.
 elim: n.
-- move => m.
+- move =>m.
   apply: wBisim_trans.
   apply: fixpointE.
   rewrite //= bindretf muln1 //=.
@@ -990,6 +995,105 @@ apply: wBisim_trans.
     by rewrite fmapE bindretf.
 by apply wBisim_refl.
 Qed.
+
+Definition collatzs1_body (nml: nat*nat*nat) : M ((nat*nat + nat*nat*nat))%type :=
+match nml with (n,m,l) => 
+if (l %% 4 == 1) && (n == 1) then ret _ (inl (m,l))
+else if (n == 1) then ret _ (inr (m+1,m+1,0))
+                 else if (n %% 2) == 0 then ret _ (inr (n./2,m,l+1))
+                               else ret _ (inr (3*n + 1, m, l+1))
+end.
+Definition collatzs1 (n:nat):= while _ _ collatzs1_body (n,n,0).
+Definition collatzs2'_body (nml: nat*nat*nat) : M ((nat*nat + nat*nat*nat) + nat*nat*nat)%type :=
+match nml with (n,m,l) => 
+if n== 1 then ret _ (inl(inr (m+1, m+1, l)))
+         else if (n %% 2 == 0) then ret _ (inr (n./2,m,l+1))
+                               else ret _ (inr (3*n + 1, m, l+1))
+end.
+Definition collatzs2_body (nml: nat*nat*nat) : M (nat*nat + nat*nat*nat)%type:=
+match nml with (n,m,l) => if (l %% 4 == 1) then ret _ (inl (m,l)) else (while _ _ collatzs2'_body (n,n,0)) end.
+Definition collatzs2 (n: nat) := (while _ _ collatzs2_body) (n,n,0).
+
+Definition collatzaux_body (nml: nat*nat*nat) : M ((nat*nat + nat*nat*nat) + nat*nat*nat)%type :=
+match nml with (n,m,l) => 
+if n== 1 then if (l %% 4 == 1) then ret _ (inl(inl (m,l))) else ret _ (inl(inr (m+1, m+1, 0)))
+         else if (n %% 2 == 0) then ret _ (inr (n./2,m,l+1))
+                               else ret _ (inr (3*n + 1, m, l+1))
+end.
+(*
+Lemma collatstepcE (n: nat): collatzs1 n ≈ collatzs2 n.  
+Proof.
+have: forall n, collatzs2_body (n,n,0) ≈ (while _ _ collatzaux_body) (n,n,0).
+  move => n'.
+  rewrite/collatzaux_body/collatzs2_body.  
+  simpl.
+  apply: wBisim_trans.
+    + apply fixpointE.
+    + simpl.
+      case_eq (n' == 1) => Hn.
+      * rewrite bindretf. simpl.
+        rewrite wBisim_sym.
+        apply: wBisim_trans.
+        apply fixpointE.
+        simpl. rewrite Hn. rewrite bindretf. simpl. apply wBisim_refl.
+      * case_eq (n' %% 2 == 0) => He.
+        ** simpl. rewrite bindretf. simpl. rewrite wBisim_sym. apply: wBisim_trans.
+           apply fixpointE. simpl. rewrite Hn. rewrite He. simpl. rewrite bindretf. simpl. rewrite/collatzs2'_body.
+
+
+
+
+  case_eq (l %% 4 == 1) => Hl.
+  - case_eq (p == 1) => Hp. 
+    + rewrite wBisim_sym.
+      apply: wBisim_trans.
+      * apply fixpointE.
+      * rewrite //= Hp Hl bindretf //=. 
+        by apply wBisim_refl.
+    + rewrite wBisim_sym.
+      apply: wBisim_trans.
+      * apply fixpointE.
+      * simpl.
+        rewrite Hp.
+        case_eq (p %% 2 == 0) => Hp'.
+        ** rewrite bindretf.
+           simpl.
+
+rewrite //= Hp Hl bindretf //=. 
+        by apply wBisim_refl.
+rewrite/collatzs1/collatzs2.
+rewrite/collatzs1_body/collatzs2_body. 
+rewrite wBisim_sym.
+apply wpreserve.
+- case_eq (p == 1) => Hp //=.
+  + by apply wBisim_refl. 
+  + 
+*)
+
+Definition divide5_body (f:nat -> M nat)(nm: nat*nat):M(nat + nat*nat)%type := 
+match nm with (n,m) => 
+  if m %% 5 == 0 then ret _ (inl m) 
+                 else f n >>= (fun x => ret _ (inr (n.+1 , x))) end.
+
+Definition dividefac1 (n: nat):= while _ _ (divide5_body (fun n => factdelay (n, 1))) (n,1).
+Definition dividefac2 (n: nat):= while _ _ (divide5_body (fun n => ret _ (fact n))) (n,1).
+Lemma eq_dividefac: forall n, dividefac1 n ≈ dividefac2 n.
+Proof.
+move => n.
+rewrite/dividefac1/dividefac2.
+apply wpreserve.
+move => [k l].
+case_eq (l %% 5 == 0) => Hl //=.
+- rewrite Hl.
+  apply wBisim_refl.
+- rewrite Hl bindretf.
+  apply: wBisim_trans.
+  + apply:bpreserve.
+     apply (eq_fact_factdelay k 1).
+  + rewrite bindretf mul1n.    
+    apply wBisim_refl.     
+Qed.
+      
 End DelayExample.
 
 HB.mixin Record isMonadContinuation (M : UU0 -> UU0) of Monad M := {
