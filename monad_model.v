@@ -527,6 +527,19 @@ exists (n + m).
 by rewrite stepsD Hs1 addnC stepsD -Hs2 -stepsD -stepsD addnC.
 Qed.
 
+Lemma wBisim_trans' A: forall (d1 d2 d3: M A), d1 ≈ d2 -> d2 ≈ d3 -> d1 ≈ d3.
+Proof.
+move => d1 d2 d3 H1 H2.
+apply (wBisim_trans H1 H2).
+Qed.
+
+Add Parametric Relation A : (M A) (@wBisim A)
+  reflexivity proved by (@wBisim_refl A)
+  symmetry proved by (@wBisim_sym' A)
+  transitivity proved by (@wBisim_trans' A)
+  as wBisim_rel.
+
+
 Lemma wBisim_spin {A} (d: M A): d ≈ (@spin A) -> d = (@spin A).
 Proof.
 move => /asboolP [n Hw].
@@ -1172,7 +1185,7 @@ Qed.
 Lemma uniform {A B C} (f:A -> Delay(B + A)) (g: C -> Delay (B + C)) (h: C -> Delay A) :
   forall (z:C),(h z) >>= f  ≈ ( (g z) >>= (sum_functin ((Delay # inl) \o (fun (y:B) => DNow y)(*ret*)) ((Delay # inr) \o h ))) -> forall (z:C), (h z) >>= (while f)  ≈  while g z. Abort.*)
 HB.instance Definition _ := @isMonadDelay.Build M
-  (@while) wBisim wBisim_refl wBisim_sym wBisim_trans (@fixpointE) (@naturalityE) (@codiagonalE) (@wpreserve).
+  (@while) wBisim wBisim_refl wBisim_sym wBisim_trans (@fixpointE) (@naturalityE) (@codiagonalE) (@wpreserve) (@bpreserve).
 
 End wBisim.
 End delayops.
