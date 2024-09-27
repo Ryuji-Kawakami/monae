@@ -7,7 +7,7 @@ From infotheo Require convex classical_sets_ext.
 Require Import monae_lib.
 From HB Require Import structures.
 Require Import hierarchy monad_lib fail_lib state_lib trace_lib.
-(*Require Import monad_transformer.*)
+Require Import monad_transformer.
 
 (******************************************************************************)
 (*                       Models for various monads                            *)
@@ -224,7 +224,7 @@ Proof. move=> *; exact/Bisim_eq/associative_bisim. Qed.
 HB.instance Definition _ := isMonad_ret_bind.Build
                               Delay left_neutral right_neutral associative.
 End delaymonad.
-End DelayMonad.  
+End DelayMonad.
 HB.export DelayMonad.
 
 Module DelayOps.
@@ -283,7 +283,6 @@ elim: m => //=.
     * apply Hm in H.
       by apply onestep_mono.
 Qed.
-
 
 CoFixpoint spin A  :M A  := DLater (spin A).
 
@@ -387,6 +386,7 @@ Lemma SymOeq A (d1 d2: M A): Oeq d1 d2 -> Oeq d2 d1.
       apply (OLater (CIH d2 d1 H1)).
 Qed.
 
+
 Lemma Terminates_steps A (d: M A) (a: A): Terminates d a <-> (exists n, steps n d = DNow a). 
 Proof.
 split.
@@ -419,97 +419,104 @@ split.
         by exists n0.
 Qed.
 
-CoFixpoint Oeqspin A: Oeq (@spin A) (@spin A).
+Lemma Terminates_func A (d : M A) (a b: A): Terminates d a -> Terminates d b -> a = b.
 Proof.
-rewrite -spinE.
-by apply OLater. Qed.
+case/Terminates_steps => n Ha.
+case/Terminates_steps => m Hb.
+wlog:n m a b Ha Hb/ n <= m.
+- case/orP: (leqVgt n m) => nm H.
+  + by apply: (H _ _ _ _ Ha Hb).
+  + symmetry. 
+     apply: (H _ _ _ _ Hb Ha).
+     exact:ltnW.
+- move => nm.
+  rewrite (monotonicity_steps Ha nm) in Hb .
+  by case: Hb.
+Qed.
+
+CoFixpoint Oeqspin A: Oeq (@spin A) (@spin A).
+Proof. by rewrite -spinE; apply OLater. Qed.
 
 Lemma not_Oeq_spin_now A (a: A): ~ (Oeq (DNow a) (@spin A)). 
 Proof.
 move => H.
 inversion H.
 apply Terminates_steps in H1.
-have: exists (a: A) (n : nat), steps n (spin A) = DNow a. by exists a0.
-move => He.
+have He: exists (a: A) (n : nat), steps n (spin A) = DNow a. 
+  by exists a0.
 by apply nonsteps_spin in He.
 Qed.
 
+Lemma Terminate_oeq A (d1 d2 : M A) (a: A): Terminates d1 a -> Oeq d1 d2 -> Terminates d2 a.
+Proof.
+move => Ha.
+elim: Ha d2.
+- clear; move => a d2 Ho.
+  inversion Ho.
+  inversion H.
+  by subst.
+- clear; move => d a Ha IH d2 Ho.
+  inversion Ho.
+  + inversion H.
+    subst.
+    by rewrite (Terminates_func Ha H4).
+  + apply TDLater.
+    by apply IH.
+Qed.
 
-Lemma onesteps_Oeq A (d1 d2: M A) :  Oeq d1 d2 <-> Oeq (DLater d1) d2 .
+CoFixpoint TransOeq A (d1 d2 d3: M A): Oeq d1 d2 -> Oeq d2 d3 -> Oeq d1 d3.
 Proof.
-split.
-- move: d1 d2.
-   cofix CIH.
-  move => d1 d2 Ho.  
-  case: d2 Ho.
-  + move => a Ha.
-    inversion Ha.
-    inversion H0.
-    rewrite -H3.
-    rewrite -H3 in H0.
-    have: Terminates (DLater d1) a.
-    rewrite -H3 in H.
-    apply (TDLater H ).
-    move => Hda.
-    apply (OTerminate  Hda H0).
-  + move => d Hd.
-    inversion Hd.
-    have: Terminates (DLater d1) a.
-    apply (TDLater H).
-    move => Ha.
-    apply (OTerminate Ha H0).    
-    apply CIH in H1.
-    by apply OLater.
-- move: d1 d2.
-  cofix CIH.
-  move => d1 d2 Ho.  
-  case: d1 Ho.
-  + move => a Ha.
-    inversion Ha.
-    inversion H.
-    apply (OTerminate H4 H0).
-    inversion H0.
-    apply TDLater in H3.
-    apply (OTerminate H2 H3).
-  + move => d Hd.
-    inversion Hd.
-    inversion H.
-    apply (OTerminate H4 H0).
-    apply OLater.    
-    by apply CIH in H0.
-Qed.    
-Lemma steps_Oeq A (d1 d2: M A) (n:nat):  Oeq d1 d2 <-> Oeq (steps n d1) d2 .
+move => Hd1 Hd2.
+case: d1 d2/ Hd1 Hd2 => d1 d2.
+- move => a Ht1 Ht2 Hd2.
+  apply: (OTerminate Ht1).
+  by apply: (Terminate_oeq Ht2).
+- move => Hd1 Hd2.
+  inversion Hd2.
+  + subst.
+     have Hda: Terminates (DLater d1) a.
+       apply TDLater.
+       inversion H; subst.
+       apply: (Terminate_oeq  H2).
+       by apply SymOeq.
+     by apply: (OTerminate Hda).
+  + apply OLater.
+     by apply: (TransOeq _ _ _ _ Hd1).
+Qed.
+
+Add Parametric Relation A : (M A) (@Oeq A)
+  reflexivity proved by (@ReflOeq A)
+  symmetry proved by (@SymOeq A)
+  transitivity proved by (@TransOeq A)
+  as Oeq_rel.
+
+Hint Extern 0 (Oeq _ _) => setoid_reflexivity.
+
+CoFixpoint onestep_Oeq A (d : M A) :  Oeq (DLater d) d .
 Proof.
-split.
-- move: d1. 
-  elim: n.
-  + move => d1 Hd //=.
-  + move => n IH d1 Hd .
-    case: d1 Hd.
-    + move => a Ha.
-      by rewrite steps_now.
-    + move => d Hd //=.
-      apply onesteps_Oeq in Hd.
-      by apply IH in Hd.
-- move: d1.
-  elim: n.
-  + move => d1 //= Hd.
-  + move => n IH d1 //= Hd.
-    case: d1 Hd => //=.
-    move => d Hd.
-    have: Oeq d d2 -> Oeq (DLater d) d2.
-    apply onesteps_Oeq.
-    move => H.
-    apply H.
-    by apply IH.    
+case: d.
+- move => a.
+  apply : OTerminate.
+  + by apply/TDLater/TDNow.
+  + by apply/TDNow.
+- move => d.
+  apply OLater.
+  by apply onestep_Oeq.
+Qed.
+
+Lemma steps_Oeq A (d : M A) (n:nat): Oeq (steps n d) d .
+Proof.
+elim: n d => [|n IH] d //=.
+- case: d IH.
+  + move => a _ //=.
+  + move => d IH //=.
+     by rewrite IH onestep_Oeq.
 Qed.
 
 Section wBisim.
 Import boolp.
 Definition wBisim (A: UU0)  (d1 d2: M A): bool :=
   `[< exists n, steps n d1 = steps n d2 >].
-
-
 
 Notation "a '≈' b" := (wBisim a b).
 Lemma wBisim_refl A : reflexive (@wBisim A).
@@ -526,7 +533,6 @@ apply /asboolP.
 exists (n + m).
 by rewrite stepsD Hs1 addnC stepsD -Hs2 -stepsD -stepsD addnC.
 Qed.
-
 Lemma wBisim_trans' A: forall (d1 d2 d3: M A), d1 ≈ d2 -> d2 ≈ d3 -> d1 ≈ d3.
 Proof.
 move => d1 d2 d3 H1 H2.
@@ -539,6 +545,46 @@ Add Parametric Relation A : (M A) (@wBisim A)
   transitivity proved by (@wBisim_trans' A)
   as wBisim_rel.
 
+Lemma terminatesP A (a:M A): decidable (exists c, exists m, steps m a = DNow c ).
+Proof.
+case/boolP: `[< exists c, exists m, steps m a = DNow c >].
+- move/asboolP; by left.
+- move/asboolP; by right.
+Qed.
+
+Lemma onesteps_wBisim A (d : M A): (DLater d) ≈ d.
+Proof.
+case: (terminatesP d).
+- move => [c [m Hs]].
+  have Hc: d ≈ DNow c.
+    apply/asboolP.
+    exists m.
+    by rewrite Hs steps_now.
+  have Hc': DLater d ≈ DNow c.
+    apply/asboolP.
+    exists (m.+1).
+    by rewrite //= Hs.
+  apply (wBisim_trans Hc').
+  by rewrite wBisim_sym.
+- move => /nosteps_spin/Bisim_eq Hs. 
+  rewrite! Hs spinE.
+  by apply wBisim_refl.
+Qed.
+
+Lemma Terminate_wBisim A (d1 d2 : M A) (a: A): Terminates d1 a -> d1≈ d2 -> Terminates d2 a.
+Proof.
+move => Ht1.
+elim: Ht1 => [b|d b].
+- move=> /asboolP [n Hd].
+  rewrite steps_now in Hd.
+  apply Terminates_steps.
+  exists n. by symmetry.
+- move => Ht1 IH.
+  have Hd : d ≈ DLater d.
+    rewrite wBisim_sym.
+    by apply onesteps_wBisim.
+  by move/(wBisim_trans Hd).
+Qed.
 
 Lemma wBisim_spin {A} (d: M A): d ≈ (@spin A) -> d = (@spin A).
 Proof.
@@ -556,89 +602,56 @@ case: d IH => //=.
     by rewrite Hw spinE stepsn_spin.
 Qed.
 
-Theorem wBisms_Oeq_equ A (d1 d2 : M A) :d1 ≈ d2 <-> Oeq d1 d2. 
+Lemma Oeq_spin {A} (d: M A): Oeq d (@spin A) -> d = (@spin A).
+Proof.
+move => Ho.
+apply Bisim_eq.
+move: d Ho.
+cofix CIH.
+move => d Ho.
+case: d Ho.
+- move => a.
+  move => contr.  
+  by apply not_Oeq_spin_now in contr.
+- move => d Ho.
+  rewrite -spinE.
+  apply BLater.
+  apply CIH.
+  by rewrite onestep_Oeq in Ho.
+Qed.
+
+Theorem wBisim_Oeq_equ A (d1 d2 : M A) :d1 ≈ d2 <-> Oeq d1 d2. 
 Proof.
 Import boolp. 
 split.
-- case/boolP: `[< exists a, exists n, steps n d1 = DNow a >].
-  + move/asboolP => [a Ha]. 
-    case/boolP: `[< exists a, exists n, steps n d2 = DNow a >]. 
-    * move/asboolP => [b Hb]  /asboolP [n Hw]. 
-      have Hab: DNow a = DNow b.
-        case: Ha => n1 Hn1. 
-        case: Hb => n2 Hn2.
-        have: steps (n+n1+n2) d1 = steps (n+n1+n2) d2.
-          by rewrite !stepsD Hw.
-        have->: steps (n + n1 + n2) d1 = DNow a.
-          apply (monotonicity_steps Hn1). 
-          by rewrite addnACl leq_addr.
-        have->//: steps (n + n1 + n2) d2 = DNow b.
-        apply (monotonicity_steps Hn2).
-        by rewrite addnCAC -addnA leq_addr.
-      rewrite -Hab in Hb.
-      move/Terminates_steps in Ha.
-      move/Terminates_steps in Hb.
-      by apply (OTerminate Ha Hb).
-    * move/asboolP => /nosteps_spin Hs. 
-      move/Bisim_eq in Hs.
-      rewrite Hs.
-      move=> /asboolP [m Hw].
-      rewrite stepsn_spin in Hw.
-      apply (steps_Oeq d1 (@spin A) m).
-      rewrite Hw.
-      apply Oeqspin.
-  + case/boolP: `[< exists a, exists n, steps n d2 = DNow a >]. 
-    * move/asboolP => [b Hb] /asboolP /nosteps_spin Hs. 
-      move/ Bisim_eq in Hs.
-      rewrite Hs.
-      move=> /asboolP [m Hw].
-      rewrite stepsn_spin in Hw.
-      rewrite Hw.
-      apply (steps_Oeq d2 d2  m).
-      by apply ReflOeq.
-    * move/asboolP => /nosteps_spin /Bisim_eq Hd2 /asboolP /nosteps_spin /Bisim_eq Hd1 Hw.
-      rewrite Hd1 Hd2.
-      by apply ReflOeq.
-- case/boolP: `[< exists a, exists n, steps n d1 = DNow a >].
-  move/asboolP => [a [n Ha]]. 
-  case/boolP: `[< exists a, exists n, steps n d2 = DNow a >]. 
-  move/asboolP => [b [m Hb]]. 
-  + rewrite (steps_Oeq d1 d2 (n + m)).
-    move => /SymOeq Ho.
-    rewrite (steps_Oeq d2 (steps (n + m) d1) (n + m)) in Ho.
-    have: steps (n + m ) d1 = DNow a.
-    apply (monotonicity_steps Ha (leq_addr m n )).
-    have: steps (n + m ) d2 = DNow b.
-    rewrite addnC. 
-    apply (monotonicity_steps Hb (leq_addr n m )).
-    move => Hd2 Hd1. 
-    have: DNow a = DNow b.
-    move: Ho.
-    rewrite Hd1 Hd2.
-    move => Ho.
-    inversion Ho.
-    inversion H.
-    by inversion H0.
-    move => Hab.
-    rewrite Hab in Hd1.
-    apply /asboolP.
-    exists (n + m). 
-    by rewrite Hd1 Hd2. 
-  + move/asboolP => /nosteps_spin /Bisim_eq Hd2.
-    rewrite (steps_Oeq d1 d2 n) Ha Hd2.
-    move => Has.
-    by apply not_Oeq_spin_now in Has.
-- case/boolP: `[< exists a, exists n, steps n d2 = DNow a >]. 
-  move/asboolP => [b [m Hb]].
-  + move/asboolP => /nosteps_spin /Bisim_eq Hd2.
-    move => /SymOeq Ho.
-    rewrite (steps_Oeq d2 d1 m) Hd2 Hb in Ho.
-    by apply not_Oeq_spin_now in Ho.
-  + move/asboolP => /nosteps_spin /Bisim_eq Hd2 /asboolP /nosteps_spin /Bisim_eq Hd1 Ho.
-    rewrite Hd1 Hd2.
-    apply /asboolP.
-    by exists 0.
-Qed.    
+- case: (terminatesP d1).
+  + move => [a Ha]. 
+     apply Terminates_steps in Ha.
+     move/(Terminate_wBisim Ha).
+     by apply (OTerminate Ha).
+- move => /nosteps_spin/Bisim_eq Hs.
+  rewrite Hs wBisim_sym.
+  move/wBisim_spin => Hd2.
+  by rewrite Hd2.       
+- case: (terminatesP d1).
+   + move => [a Ha]. 
+     apply Terminates_steps in Ha.
+     move/(Terminate_oeq Ha).
+     move/Terminates_steps.
+     apply Terminates_steps in Ha.
+     move=> [m Hd2].
+     case: Ha => [n Hd1].
+     apply/asboolP.
+     exists (n + m).
+     by rewrite stepsD addnC stepsD Hd1 Hd2 steps_now steps_now.
+  + move => /nosteps_spin/Bisim_eq Hs.
+     rewrite Hs.
+     move/SymOeq.
+    move/Oeq_spin => Hd2.
+  rewrite Hd2.     
+  apply wBisim_refl.
+Qed.     
+
 Lemma steps_bind {A B} (n:nat) (m: M A) (f: A -> M B) : steps n (m >>= f) ≈  m >>= ((steps n) \o f).
 Abort.
 Lemma steps_ret {A} (n:nat) (a: A) : steps n (@ret A a) ≈ @ret A a. 
@@ -687,8 +700,6 @@ cofix CIH.
 rewrite -spinE -(spinE B) bindLE. 
 by apply BLater. 
 Qed.
-
-
 
 Lemma while_spin A B (f: A -> M (B + A)) (a: A) : while f a = (@spin B) -> Bisim( ((f a) >>= (sum_rect (fun => M B ) (@DNow B ) (while f)))) ((@spin B)).
 Proof.
@@ -743,7 +754,7 @@ move: d Hs.
 elim: n.
 - move => d //= Hd.
   rewrite Hd.
-  apply wBisim_refl.
+  setoid_reflexivity.
 - move => n IH d.
   case: d IH.
   + move => a0 IH Hs.
@@ -751,13 +762,13 @@ elim: n.
     rewrite Hs.
     apply wBisim_refl.
   + move => d IH //= Hs.
-    apply wBisms_Oeq_equ.
+    apply wBisim_Oeq_equ.
     rewrite bindLE.
     apply SymOeq.
-    apply->  onesteps_Oeq.
-    apply wBisms_Oeq_equ.
+    rewrite onestep_Oeq.
+    apply wBisim_Oeq_equ.
     rewrite wBisim_sym.
-    by apply IH. 
+    by rewrite (IH _ Hs).
 Qed.
 Lemma bind_steps A B (d1: M A) : (exists n a, ( steps n d1 = DNow a)) -> forall  (f: A -> M B) (d2: M B) (m: nat), steps m d1 >>= f ≈ d2 -> d1 >>= f ≈ d2. 
 Proof.
@@ -794,12 +805,12 @@ Qed.
 Lemma wBisims_later  (A: Type) (d1 d2: M A): DLater d1 ≈ d2 <->  d1 ≈ d2. 
 Proof.
 split.
-move =>/wBisms_Oeq_equ Hd.
-apply wBisms_Oeq_equ.
-by apply onesteps_Oeq.
-move => /wBisms_Oeq_equ H.
-apply wBisms_Oeq_equ.
-by apply onesteps_Oeq in H.
+move =>/wBisim_Oeq_equ Hd.
+apply wBisim_Oeq_equ.
+by rewrite -(onestep_Oeq d1).
+move => /wBisim_Oeq_equ H.
+apply wBisim_Oeq_equ.
+by rewrite onestep_Oeq.
 Qed.
 (* the next four conditions derived from Complete Elgot monads *)
 Lemma fixpointE {A B} (f: A -> M (B + A)):forall (a:A), while f a ≈ (f a) >>= (sum_rect (fun => M B ) (@DNow B ) (while f)) .
@@ -842,38 +853,11 @@ move/asboolP => [ab Hab].
   apply wBisim_refl.
 Qed.
 
-Lemma terminatesP A (a:M A): decidable (exists c, exists m, steps m a = DNow c ).
-Proof.
-case/boolP: `[< exists c, exists m, steps m a = DNow c >].
-- move/asboolP; by left.
-- move/asboolP; by right.
-Qed.
-
 Lemma bindo A B (d: M A) (a: A): (exists n , steps n d = DNow a) -> forall  (f: A -> M B) , Oeq (DNow a >>= f)  (d >>= f).
 Proof.
 move => Hs f.
-apply/wBisms_Oeq_equ.
+apply/wBisim_Oeq_equ.
 by apply binds. Qed.
-
-Lemma Oeq_trans A (d1 d2 d3: M A): Oeq d1 d2 -> Oeq d2 d3 -> Oeq d1 d3.
-Proof.
-move =>  /wBisms_Oeq_equ Hd12 /wBisms_Oeq_equ Hd23.
-apply/ wBisms_Oeq_equ.
-apply: wBisim_trans.
-apply Hd12.
-apply Hd23.
-Qed.
-Lemma Oeq_sym A (d1 d2: M A): Oeq d1 d2 -> Oeq d2 d1.
-Proof.
-move => /wBisms_Oeq_equ Hd12.
-apply/wBisms_Oeq_equ.
-by rewrite wBisim_sym.
-Qed.
-Lemma Oeq_refl A (d: M A): Oeq d d.
-Proof.
-apply/wBisms_Oeq_equ. 
-apply/ wBisim_refl.
-Qed.
 
 (*hierarchy.v monad_lib. *)
 CoFixpoint naturality' {A B C} (f: A -> M (B + A)) (g: B -> M C)(d: M (B + A)):
@@ -892,14 +876,14 @@ case: d.
   case: ab.
   + move => b.
     rewrite bindretf bindA bindretf bindretf //= fmapE. 
-    apply wBisms_Oeq_equ.
+    apply wBisim_Oeq_equ.
     case: (terminatesP (g b)).
     * move => [c [m Hs]].
       rewrite wBisim_sym.
       apply: wBisim_trans.
       ** rewrite wBisim_sym bindA.
          apply binds.
-         exists m . 
+         exists m.
          by apply Hs.
       ** rewrite bindretf //= bindretf.
          apply/asboolP.
@@ -922,7 +906,7 @@ case: d.
 Qed.
 Lemma naturalityE {A B C} (f: A -> M (B + A)) (g: B -> M C)(a:A):
    (while f a) >>= g   ≈  while (fun y => (f y) >>= (sum_rect (fun => M (C + A)) (M # inl \o g) (M # inr \o (@ret A )) ) ) a.
-Proof. by apply wBisms_Oeq_equ; rewrite whileE whileE; apply naturality'. Qed.
+Proof. by apply wBisim_Oeq_equ; rewrite whileE whileE; apply naturality'. Qed.
 
 CoFixpoint codiagonal' {A B} (f: A -> M ((B + A) + A))(d: M ((B + A) + A)):
 Oeq (( d >>= (Ret \o sum_rect (fun=> (B + A)%type) idfun inr)) >>=
@@ -944,8 +928,7 @@ case: d.
   + move => ba. 
     case: ba.
     * move => b.
-      rewrite bindretf bindretf bindretf //= bindretf.
-      by apply Oeq_refl.
+      by rewrite bindretf bindretf bindretf //= bindretf.
     * move => a.
       rewrite bindretf bindretf bindretf //= bindretf whileE whileE whileE //= fmapE.
       apply OLater.
@@ -962,7 +945,7 @@ Qed.
 
 Lemma codiagonalE {A B} (f: A -> M ((B + A) + A))(a:A):
    while ((Delay # ((sum_rect (fun => (B + A)%type) idfun inr)))  \o f ) a  ≈ while (while f) a. 
-Proof. by apply wBisms_Oeq_equ; rewrite whileE whileE whileE //= fmapE; apply codiagonal'. Qed.
+Proof. by apply wBisim_Oeq_equ; rewrite whileE whileE whileE //= fmapE; apply codiagonal'. Qed.
 
 CoFixpoint wpreserve1 {A B} (f g: A -> M(B + A)): (forall a, wBisim (f a) (g a)) -> forall (d1 d2: M (B + A)) , ( d1 ≈ d2) ->  ((d1 >>= (fun ab : B + A => match ab with
                                    | inl b => DNow b
@@ -998,9 +981,9 @@ case: d1 Hd.
       apply BLater.
       have Had: DNow (inr a) ≈ d.
         rewrite wBisim_sym.
-        apply wBisms_Oeq_equ.
-        apply onesteps_Oeq.
-        apply wBisms_Oeq_equ.
+        apply wBisim_Oeq_equ.
+        rewrite -(onestep_Oeq d).
+        apply wBisim_Oeq_equ.
         apply/asboolP.
         exists n.
         by rewrite Hd.
@@ -1047,9 +1030,9 @@ case: d1 Hd.
     apply BLater.
     have Hd2 : DLater d ≈ d'.
       rewrite wBisim_sym. 
-      apply wBisms_Oeq_equ.
-      apply onesteps_Oeq.
-      apply wBisms_Oeq_equ.
+      apply wBisim_Oeq_equ.
+      rewrite -(onestep_Oeq d').      
+      apply wBisim_Oeq_equ.
       rewrite wBisim_sym. 
       apply /asboolP.
       by exists n.
@@ -1116,19 +1099,19 @@ elim: n.
          exists m.
          by rewrite -Hd.
       ** rewrite bindretf.
-         apply wBisms_Oeq_equ.
-         apply -> onesteps_Oeq.
-         apply wBisms_Oeq_equ.
+         apply wBisim_Oeq_equ.
+         rewrite onestep_Oeq.
+         apply wBisim_Oeq_equ.
          rewrite whileE.
          apply (IH (f a') (g a') (Hfg a')).
          by rewrite -whileE.
   + move => d Hd.
     rewrite bindLE //=.
     move => Hf.
-    apply: IH.
-    apply wBisms_Oeq_equ.
-    apply onesteps_Oeq.
-    apply wBisms_Oeq_equ.
+    apply:(IH d d2 _ _ ).
+    apply wBisim_Oeq_equ.
+    rewrite -(onestep_Oeq d).
+    apply wBisim_Oeq_equ.
     apply Hd.     
     by apply Hf.
 Qed.
@@ -1210,13 +1193,13 @@ elim: n.
   apply: wBisim_trans.
   apply: fixpointE.
   simpl.
-  rewrite bindretf(*bind_ret*) muln1 //=.
+  rewrite bindretf muln1 //=.
   apply wBisim_refl.
 - move => n IH m.
   eapply wBisim_trans.
   apply fixpointE.
   simpl.
-  rewrite bindretf (*bind_ret*) //=.
+  rewrite bindretf //=.
   eapply wBisim_trans. 
   apply IH. 
   rewrite mulnA.
@@ -1246,9 +1229,540 @@ Definition minus2_body (nm: nat*nat) : Delay (nat + nat*nat) := match nm with
                                                       end.
 Definition minus2 := while minus2_body.
 Lemma eq_minus : forall (nm: nat*nat), wBisim (minus1 nm) (minus2 nm). Abort.
+
+Definition collatzs1_body (nml: nat*nat*nat) : M ((nat*nat + nat*nat*nat) + nat*nat*nat)%type :=
+match nml with (n,m,l) => 
+if n==1 then if (l %% 4 == 1) then ret (inl(inl (m,l))) else ret (inl(inr (m+1, m+1, 0)))
+         else if (n %% 2 == 0) then ret (inr (n./2,m,l+1))
+                               else ret (inr (3*n + 1, m, l+1))
+end.
+
+Definition collatzs1 (n: nat) := while (while collatzs1_body) (n,n,0).
+Compute steps 50 (collatzs1 4).
+
+Definition collatzs2_body (nml: nat*nat*nat) : M ((nat*nat + nat*nat*nat))%type :=
+match nml with (n,m,l) => 
+if (l %% 4 == 1) && (n == 1) then ret (inl (m,l))
+else if (n == 1) then ret (inr (m+1,m+1,0))
+                 else if (n %% 2) == 0 then ret (inr (n./2,m,l+1))
+                               else ret (inr (3*n + 1, m, l+1))
+end.
+Definition collatzs2 (n:nat):= while collatzs2_body (n,n,0).
+
+Compute steps 50 (collatzs2 4).
+
+Lemma collatzstepE (n:nat): wBisim (collatzs1 n) (collatzs2 n). 
+Proof.
+rewrite/collatzs1/collatzs2.
+apply: wBisim_trans.
+rewrite wBisim_sym.
+apply codiagonalE.
+apply wpreserve.
+move => [[n' m] l].
+rewrite/collatzs1_body/collatzs2_body.
+case/boolP: (l %% 4 == 1) => Hl //=.
+- case/boolP: (n' == 1) => Hn' //=.
+  + rewrite Hl fmapE bindretf //=.
+    by apply wBisim_refl.
+  + case/boolP: (n' %% 2 == 0) => He //=.
+    * rewrite fmapE bindretf //=.
+      by apply wBisim_refl.
+    * rewrite fmapE bindretf //=.
+      by apply wBisim_refl.
+- case/boolP: (n' == 1) => Hn' //=.
+  + rewrite ifN //= fmapE bindretf //=.
+    by apply wBisim_refl.
+  + case/boolP: (n' %% 2 == 0) => He //=.
+    * rewrite fmapE bindretf //=.
+      by apply wBisim_refl.
+    * rewrite fmapE bindretf //=.
+      by apply wBisim_refl.
+Qed.
+(*
+
+Definition steteDelay {S} := MS S Delay.
+Print steteDelay.
+
+Definition DS {S} (A:Type):Type :=  S -> Delay (A * S).
+
+Definition retDS {S X}:= fun (x:X) => (fun (s:S) => DNow (x, s)).
+Check fst.
+Definition bindDS {X Y S} (m:DS X)(f: X -> DS Y):= fun (s:S) => bind (m s) (fun( xs  :X * S) => f (fst xs) (snd xs)).
+CoFixpoint whileDS {X Y S} (body: X -> DS (Y + X)): X ->DS Y := 
+fun (x:X) => bindDS (body x) (fun ab => match ab with
+                                      |inr a => (fun (s: S) => DLater ((whileDS body a) s))
+                                      |inl b => retDS b
+                                      end).
+
+Definition getDS(u:unit) :DS nat := fun s => DNow (s,s).   
+Definition putDS(n:nat):DS unit := fun (s:nat) => DNow (tt, n).
+Definition sumds_body:nat -> DS (unit + nat) := fun (m:nat) => bindDS (bindDS (getDS tt) (fun n => putDS ( n + m ))) 
+(fun _ => match m with
+           |O => (fun s => DNow (inl tt, s ))
+           |S m' => (fun s => DNow (inr m', s ))
+         end).
+Definition sumds := whileDS sumds_body.
+Definition stepsDS {S A}  (n:nat) (m: DS A): DS A := fun (s:S) => steps n (m s).
+Compute (stepsDS 20 (sumds 10)) 0.
+*)
+
+
 End delayops_examples.
 End DelayOps.
 HB.export DelayOps.
+
+Module TensorS.
+Section tensors.
+
+
+Variable A:UU0.
+Definition tensorS (S:UU0):= fun (A: UU0) => (S * A)%type. 
+Definition actmt (S:UU0) (X Y: UU0):(X -> Y) -> tensorS S X -> tensorS S Y:=(fun f: X -> Y =>  (fun ax:S * X => match ax with (a, x) => (a, f x) end)). 
+
+
+Require Import Coq.Logic.FunctionalExtensionality.
+
+
+Let tensor_id (S:UU0): FunctorLaws.id (@actmt S).
+Proof.
+rewrite/actmt/FunctorLaws.id => B. 
+apply functional_extensionality => x.
+by case: x. 
+Qed.
+
+Let tensor_o (S:UU0): FunctorLaws.comp (@actmt S).
+Proof.
+rewrite/actmt/FunctorLaws.comp => X Y Z g h.
+apply functional_extensionality => x.
+by case: x. Qed.
+
+HB.instance Definition _:= isFunctor.Build (@tensorS A) (@tensor_id A) (@tensor_o A).
+
+(*
+Definition homS (A:UU0) := fun (S:UU0) => (A -> S).
+Definition actmh (A:UU0)(X Y: UU0):(X -> Y) -> homS A X -> homS A Y := fun (f: X -> Y) => fun (m: A ->X) => f \o m.
+
+Let hom_id (A:UU0): FunctorLaws.id (@actmh A).
+Proof.
+rewrite/actmh/FunctorLaws.id => B.
+by apply functional_extensionality => x.
+Qed.
+
+Let hom_o (A:UU0) : FunctorLaws.comp (@actmh A).
+Proof.
+rewrite/actmh/FunctorLaws.comp => X Y Z g h.
+by apply functional_extensionality => x.
+Qed.
+
+HB.instance Definition _:= isFunctor.Build (@homS T) (@hom_id T) (@hom_o T).
+Variable f: nat -> nat.
+Check (tensorS nat) # f.
+*)
+
+End tensors.
+End TensorS.
+HB.export TensorS.
+
+Module HomS.
+Section homs.
+Require Import Coq.Logic.FunctionalExtensionality.
+
+Variable A:UU0.
+
+Definition homS (S:UU0) := fun (A:UU0) => (S -> A).
+Definition actmh (S:UU0)(X Y: UU0):(X -> Y) -> homS S X -> homS S Y := fun (f: X -> Y) => fun (m: S ->X) => f \o m.
+
+Let hom_id (S:UU0): FunctorLaws.id (@actmh S).
+Proof.
+rewrite/actmh/FunctorLaws.id => B.
+by apply functional_extensionality => x.
+Qed.
+
+Let hom_o (S:UU0) : FunctorLaws.comp (@actmh S).
+Proof.
+rewrite/actmh/FunctorLaws.comp => X Y Z g h.
+by apply functional_extensionality => x.
+Qed.
+
+HB.instance Definition _:= isFunctor.Build (@homS A) (@hom_id A) (@hom_o A).
+
+End homs.
+End HomS.
+HB.export HomS.
+
+Module StateTdelay.
+Section stateTdelay.
+Require Import Coq.Logic.FunctionalExtensionality.
+Variable S: UU0.
+(*adjlr:hom(tensorS X, Y) -> hom(X, homS Y)*)
+
+
+
+Definition DS {S} := homS S \o Delay \o tensorS S.
+Print DS.
+
+Definition dist1 {X Y S} (s:tensorS S (Y + X)) :(tensorS S Y) + (tensorS S X) := let (s, yx) := s in match yx with |inl y => inl (s,y) | inr x => inr (s,x) end.
+Definition dist2 {X Y S} (xy: (tensorS S Y) + (tensorS S X)): tensorS S (Y + X) := match xy with | inl (s, y) => (s, inl y) | inr (s, x) => (s, inr x) end. 
+
+Definition unitS {S X}: X -> homS S (tensorS S X) := fun (x: X) => fun (s: S) => (s, x).
+
+Definition adjlr (S: UU0)(X Y: UU0):((tensorS S X) -> Y) -> (X -> (homS S Y)) := fun f => ((homS S) # f) \o (@unitS S X).
+
+Definition counitS {S X}: tensorS S (homS S X) -> X:= fun sf => let (s,f) := sf in f s.
+
+Definition adjrl (S: UU0)(X Y: UU0):(X -> (homS S Y)) -> ((tensorS S X) -> Y) := fun f => (@counitS S Y) \o ((tensorS S) # f).
+
+Definition retDS {S} (X: UU0): X -> DS X:= fun (x:X) => (fun (s:S) => ret (s, x)).
+Check fst.
+
+(*
+Definition retDS {S} (X: UU0): X -> DS X:= (homS S # (@ret (tensorS S X))) \o unitS.
+Print join.
+
+Definition bindDS {S} (X Y: UU0): DS X -> (X -> DS Y) -> DS Y :=
+fun m => fun f => ((homS S # (fun m' => (m' >>= idfun))) \o (homS S \o Delay) # counitS ) ((DS # f) m).
+*)
+
+Definition bindDS {S} (X Y: UU0): DS X -> (X -> DS Y) -> DS Y :=
+ fun m => fun f => (fun (s:S) => ((m s) >>= (fun xs => f (snd xs) (fst xs)))).
+
+(*
+
+Lemma testfg {A B} (f g: functor) (k : A -> B): (f \o g) # k = f # (g # k).
+Proof.
+by rewrite FCompE. Qed.
+
+Lemma testcomp {A B C} (f: A -> B) (g: B -> C) (a: A): (g \o f) a = g (f a).
+by []. Qed.
+
+Lemma testhomS {A B} (f: A -> B) (m:S -> A) : (homS S # f) m = f \o m.
+Proof.
+simpl.
+by [].
+Qed.
+
+
+
+Lemma actm_bind (A B : UU0) (f : A -> B) (m : Delay A): 
+ (Delay # f) m = m >>= (@ret _  \o f).
+Proof.
+simpl.
+rewrite/actm.
+simpl. by []. Qed.
+
+Let left_neutral : BindLaws.left_neutral (@bindDS S) (@retDS S).
+Proof.
+rewrite/BindLaws.left_neutral/bindDS/retDS => A B a f //=.
+rewrite testfg.
+rewrite! testhomS.
+apply functional_extensionality => s.
+simpl. 
+rewrite actm_bind.
+rewrite/DS.
+rewrite testfg.
+rewrite FCompE.
+rewrite! testhomS.
+simpl.
+rewrite actm_bind.
+rewrite bindretf.
+simpl.
+by rewrite! bindretf.
+Qed.
+
+Let right_neutral : BindLaws.right_neutral (@bindDS S) (@retDS S).
+Proof.
+rewrite/BindLaws.right_neutral/bindDS/retDS => A m.
+rewrite! testfg.
+rewrite! testhomS.
+rewrite -functor_o.
+rewrite testhomS.
+apply functional_extensionality => s.
+simpl.
+rewrite actm_bind.
+rewrite actm_bind.
+rewrite/counitS.
+rewrite bindA.
+have -> : (ret (A:=tensorS S (DS A)) \o
+       TensorS_tensorS__canonical__hierarchy_Functor S # (homS S # ret (A:=tensorS S A) \o unitS)) = (@ret (tensorS S (DS A))).
+
+rewrite bindmret.
+have -> : (fun xs : tensorS S A => ret (xs.1, xs.2)) = (@ ret (tensorS S A)).
+  apply functional_extensionality => xs.
+  by case: xs => //=.  
+by rewrite bindmret.
+Qed.
+
+Let associative : BindLaws.associative (@bindDS S).
+Proof.
+rewrite/BindLaws.associative/bindDS => A B C m f g.
+apply functional_extensionality => s.
+by rewrite bindA //=.
+Qed.
+
+*)
+
+Let left_neutral : BindLaws.left_neutral (@bindDS S) (@retDS S).
+Proof.
+rewrite/BindLaws.left_neutral/bindDS/retDS => A B a f //=.
+apply functional_extensionality => s.
+by rewrite bindretf //=.
+Qed.
+
+Let right_neutral : BindLaws.right_neutral (@bindDS S) (@retDS S).
+Proof.
+rewrite/BindLaws.right_neutral/bindDS/retDS => A m.
+apply functional_extensionality => s.
+
+have -> : (fun xs : tensorS S A => ret (xs.1, xs.2)) = (@ ret (tensorS S A)).
+  apply functional_extensionality => xs.
+  by case: xs => //=.  
+by rewrite bindmret.
+Qed.
+
+Let associative : BindLaws.associative (@bindDS S).
+Proof.
+rewrite/BindLaws.associative/bindDS => A B C m f g.
+apply functional_extensionality => s.
+by rewrite bindA //=.
+Qed.
+
+HB.instance Definition _ :=
+  isMonad_ret_bind.Build DS left_neutral right_neutral associative.
+
+
+
+End stateTdelay.
+End StateTdelay.
+HB.export StateTdelay.
+
+
+
+
+Module ModelMonadStateDelay.
+Section modelmonadstateDelay.
+Require Import Coq.Logic.FunctionalExtensionality.
+
+Variable S: UU0.
+(*
+
+Definition retDS {S} := @retS S Delay.
+Definition bindDS {S} := @bindS S Delay.
+*)
+(*whileDSのliftSを用いた定義*)
+
+(*homS, tensorSをMSから導出して、functorであルコとを示すべき*)
+
+Print ret.
+Print bind.
+
+Lemma actm_bindE (A B :UU0) (f: A -> B) (m: Delay A) : 
+(Delay # f) m = m >>= (@ret _ \o f).
+Proof.
+by [].
+Qed.
+
+Lemma testcomp {A B C} (f: A -> B) (g: B -> C) (a: A): (g \o f) a = g (f a).
+by []. Qed.
+
+Lemma testhomS {A B} (f: A -> B) (m:S -> A) : (homS S # f) m = f \o m.
+Proof.
+simpl.
+by [].
+Qed.
+
+Lemma testtensorS {A B} (f: A -> B) (m: tensorS S A) : (tensorS S # f) m = let (s, a) := m in (s, f a).
+Proof. by []. Qed.
+
+
+Definition whileDS {X Y S} (body: X -> homS S (Delay (tensorS S (Y + X)))) := adjlr (while ((Delay # dist1) \o (adjrl body))).
+
+Check whileDS.
+Definition getDS(u:unit) :DS nat := fun s => DNow (s,s).
+Definition putDS(n:nat):DS unit := fun (s:nat) => DNow (n, tt).
+Definition sumds_body:nat -> DS (unit + nat) := fun (m:nat) => bindDS (bindDS (getDS tt) (fun n => putDS ( n + m ))) 
+(fun _ => match m with
+           |O => (fun s => DNow (s,inl tt ))
+           |m'.+1 => (fun s => DNow ( s, inr m' ))
+         end).
+Definition sumds := whileDS sumds_body.
+Definition stepsDS {S A}  (n:nat) (m: DS A): DS A := fun (s:S) => steps n (m s).
+Compute (stepsDS 20 (sumds 10)) 0. 
+
+
+Definition wBisimDS {S A} (ds1 ds2:DS A): Prop := forall s:S, ds1 s ≈ ds2 s.
+
+Lemma adjlr_preserve {A B} (f g: tensorS S A -> Delay (tensorS S B)): (forall s a, f (s, a) ≈ g (s, a)) -> (forall a, wBisimDS ((adjlr f) a) ((adjlr g) a)).
+Proof.
+move => H a.
+rewrite/wBisimDS/adjlr => s.
+simpl.
+rewrite testhomS testhomS.
+simpl.
+rewrite/unitS.
+apply H.
+Qed.
+
+Print join.
+Lemma fixpointDSE'1 {A B}  (f: A -> DS (B + A)%type) : 
+forall (a: A), ( f a >>= (sum_rect (fun => DS B ) (@retDS S B ) (whileDS f))) =  join B  ((DS # (sum_rect (fun => DS B ) (@retDS S B ) (whileDS f))) (f a) ).
+Proof.
+move => a.
+by rewrite bindE.
+Qed.
+
+Lemma joinE {A} : (@join DS) A  = (homS S # ((@join Delay) (tensorS S A) ) ) \o ((homS S \o Delay) # (@counitS S (((Delay \o (tensorS S)) A)))) .
+Proof.
+apply functional_extensionality => m.
+apply functional_extensionality => s.
+simpl.
+rewrite! testhomS.
+rewrite testcomp.
+rewrite FCompE.
+rewrite testhomS.
+simpl.
+rewrite actm_bindE.
+rewrite /bindDS.
+simpl.
+have H : bind (m s >>= (ret (A:=Delay (tensorS S A)) \o counitS)) idfun = (m s >>= (ret (A:=Delay (tensorS S A)) \o counitS)) >>= idfun.
+ by [].
+rewrite H.
+rewrite bindA.
+simpl.
+congr bind.
+apply functional_extensionality => xs.
+rewrite bindretf.
+simpl.
+rewrite/counitS.
+simpl. case: xs => a b.
+by [].
+Qed.
+
+(*
+Lemma joinE {A} : forall  m: DS (DS A),  (@join DS) A m = (homS S # ((@join Delay) (tensorS S A) ) )  (((homS S \o Delay) # (@counitS S (((Delay \o (tensorS S)) A)))) m).
+Proof.
+move => m.
+apply functional_extensionality => s.
+rewrite! testhomS.
+rewrite testcomp.
+rewrite FCompE.
+rewrite testhomS.
+simpl.
+rewrite actm_bindE.
+rewrite /bindDS.
+simpl.
+have H : bind (m s >>= (ret (A:=Delay (tensorS S A)) \o counitS)) idfun = (m s >>= (ret (A:=Delay (tensorS S A)) \o counitS)) >>= idfun.
+ by [].
+rewrite H.
+rewrite bindA.
+simpl.
+congr bind.
+apply functional_extensionality => xs.
+rewrite bindretf.
+simpl.
+rewrite/counitS.
+simpl. case: xs => a b.
+by []. Qed.*)
+
+Lemma DSE : (@DS S) = (homS S \o Delay \o tensorS S ).
+Proof.
+by [].
+Qed.
+
+Lemma sumrectDSE' {A X}(f: X -> DS (A + X)%type) : 
+  (((homS S \o Delay) # (@counitS S (((Delay \o (tensorS S)) A)))) \o ((((homS S \o Delay \o tensorS S )) # (sum_rect (fun =>  DS A) ((@retDS S A)) ((homS S # (while ((Delay # (dist1) \o (adjrl f))))) \o (unitS))))))= ((homS S \o Delay ) # ((@counitS S (((Delay \o (tensorS S)) A))) \o (tensorS S # (sum_rect (fun =>  DS A) ((@retDS S A)) ((homS S # (while ((Delay # (dist1) \o (adjrl f))))) \o (unitS)))))).
+Proof.
+by rewrite functor_o.
+Qed.
+
+(*
+Lemma sumrectDSE' {A X}(f: X -> DS (A + X)%type) : 
+  (((homS S \o Delay) # (@counitS S (((Delay \o (tensorS S)) A)))) \o (((homS S \o Delay \o tensorS S ) # (sum_rect (fun =>  DS A) ((@retDS S A)) ((homS S # (while ((Delay # (dist1) \o (adjrl f))))) \o (unitS))))))= ((homS S \o Delay ) # ((@counitS S (((Delay \o (tensorS S)) A))) \o (tensorS S # (sum_rect (fun =>  DS A) ((@retDS S A)) ((homS S # (while ((Delay # (dist1) \o (adjrl f))))) \o (unitS)))))).
+Proof.
+by rewrite -functor_o.
+Qed.
+*)
+
+Lemma sumrectDSE'' {A X}(f: X -> DS (A + X)%type):
+((@counitS S (((Delay \o (tensorS S)) A))) \o (tensorS S # (sum_rect (fun =>  DS A) ((@retDS S A)) ((homS S # (while ((Delay # (dist1) \o (adjrl f))))) \o (unitS))))) = ( (sum_rect (fun => ((Delay \o tensorS S) A)) (@DNow (tensorS S A)) (while ((Delay # (dist1) \o (adjrl f))))) \o  dist1).
+Proof.
+apply functional_extensionality => ts.
+case: ts => s ax.
+simpl. 
+case: ax => [a|x].
+by simpl.
+simpl.
+rewrite/unitS testhomS.
+by simpl.
+Qed.
+
+Lemma sumrectDSE {A X}  (f: X -> DS (A + X)%type) : 
+  (((homS S \o Delay) # (@counitS S (((Delay \o (tensorS S)) A)))) \o (((homS S \o Delay \o tensorS S) # (sum_rect (fun =>  DS A) ((@retDS S A)) ((homS S # (while ((Delay # (dist1) \o (adjrl f))))) \o (unitS))))))  = ((homS S \o Delay) # (sum_rect (fun => ((Delay \o tensorS S) A)) (@DNow (tensorS S A)) ((while ((Delay # (dist1) \o (adjrl f))))) \o  dist1)).
+Proof.
+rewrite sumrectDSE'.
+by rewrite sumrectDSE''.
+Qed.
+
+Lemma tunitl  {A X}  (f: X -> DS (A + X)%type) :
+ f = (homS S # (adjrl f)) \o unitS.
+Proof.
+apply functional_extensionality => x.
+by rewrite/unitS //= testhomS => //=. Qed.
+
+
+
+
+
+(*
+Lemma sumrectDSE {A X}  (f: X -> DS (A + X)%type) (m : (homS S \o Delay \o tensorS S) (((A + X)%type))): 
+  ((homS S \o Delay) # (@counitS S (((Delay \o (tensorS S)) A)))) (((homS S \o Delay \o tensorS S) # (sum_rect (fun =>  DS A) ((@retDS S A)) ((homS S # (while ((Delay # (dist1) \o (adjrl f))))) \o (unitS)))) m) = ((homS S \o Delay) # (sum_rect (fun => ((Delay \o tensorS S) A)) (@DNow (tensorS S A)) (while ((Delay # (dist1) \o (adjrl f)))))) ( (( homS S \o Delay) # dist1) m).
+Proof.
+apply functional_extensionality => s.
+simpl.
+rewrite! FCompE.
+rewrite! testhomS.
+simpl.
+rewrite! actm_bindE.
+rewrite testtensorS.
+
+Lemma joinE {A} : forall  m: DS (DS A),  (@join DS) A m = (homS S # ((@join Delay) (tensorS S A) ) ) \o ((homS S \o Delay) # (@counitS S (((Delay \o (tensorS pS)) A)))) m.
+
+*)
+
+Lemma fixpointDSE' {A X} (f: X -> DS (A + X)) (x: X): ( f x >>= (sum_rect (fun => DS A ) (@retDS S A ) (whileDS f))) = adjlr (((@join Delay) (tensorS S A)) \o (Delay # (@counitS S ((Delay \o (tensorS S)) A))) \o ((Delay \o tensorS S) # (sum_rect (fun =>  DS A) ((@retDS S A)) ((homS S # (while ((Delay # (dist1) \o (adjrl f))))) \o (unitS)))) \o (adjrl f ) ) x.
+Proof.
+rewrite fixpointDSE'1.
+rewrite joinE /adjlr.
+rewrite/DS.
+rewrite sumrectDSE.
+
+
+
+ (((homS S \o Delay) # (@counitS S (((Delay \o (tensorS S)) A)))) \o (((homS S \o Delay \o tensorS S) # (sum_rect (fun =>  DS A) ((@retDS S A)) ((homS S # (while ((Delay # (dist1) \o (adjrl f))))) \o (unitS))))))  = ((homS S \o Delay) # (sum_rect (fun => ((Delay \o tensorS S) A)) (@DNow (tensorS S A)) ((while ((Delay # (dist1) \o (adjrl f))))) \o  dist1))
+
+
+Lemma fixpointDSE' {A B}  (f: A -> DS (B + A)%type) : join B  (((DS # (sum_rect (fun => DS B ) (@retDS S B ) (whileDS f))) (f a) )) = 
+
+
+Lemma fixpointDSE {A B} (f: A -> DS (B + A)%type):forall (a:A), wBisimDS (whileDS f a) ( f a >>= (sum_rect (fun => DS B ) (@retDS S B ) (whileDS f))).
+
+(*adjrl:hom(X, homS Y) -> hom(tensorS X, Y)*)
+
+
+End modelmonadstateDelay.
+End ModelMonadStateDelay.
+
+
+Module ModelMonadStateDelay.
+Section modelmonadstateDelay.
+Variable S: UU0.
+Let N: monad := Delay.
+Definition M: stateMonad S := [the stateMonad S of MS S N].
+Print Get.
+
+
+End modelmonadstateDelay.
+End ModelMonadStateDelay.
+
       
 Module SetMonad.
 Section setmonad.
