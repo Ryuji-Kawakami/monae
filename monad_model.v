@@ -1308,129 +1308,59 @@ Definition stepsDS {S A}  (n:nat) (m: DS A): DS A := fun (s:S) => steps n (m s).
 Compute (stepsDS 20 (sumds 10)) 0.
 *)
 
+Definition fastexp_body (nmk: nat*nat*nat) :M (nat + nat*nat*nat)%type := match  nmk with (n,m,k) => if n == 0 then ret _ (inl m) else   (if n %% 2 == 1 then ret _ (inr (n - 1 , m*k, k)) else ret _ (inr (n./2, m, k*k) )) end. 
+
+Definition fastexp3 (n: nat) := while fastexp_body (n,1,3).
+
+Compute steps 300 (fastexp3 7).
+
+Fixpoint exp3 (n: nat) := match n with |O => 1 | S n' => 3*exp3 n' end. 
+
+Compute exp3 7. 
+
 
 End delayops_examples.
 End DelayOps.
 HB.export DelayOps.
 
-(*
 Module TensorS.
 Section tensors.
 Variable S:UU0.
-
-Definition tensorS := fun (A: UU0) => (S * A)%type. 
-Definition actmt (X Y: UU0):(X -> Y) -> tensorS X -> tensorS Y:=(fun f: X -> Y =>  (fun ax:S * X => match ax with (a, x) => (a, f x) end)). 
-
-Let tensor_id : FunctorLaws.id actmt.
-Proof.
-rewrite/actmt/FunctorLaws.id => B. 
-apply boolp.funext => x.
-by case: x. 
-Qed.
-
-Let tensor_o : FunctorLaws.comp actmt.
-Proof.
-rewrite/actmt/FunctorLaws.comp => X Y Z g h.
-apply boolp.funext => x.
-by case: x. Qed.
-
-HB.instance Definition _:= isFunctor.Build tensorS tensor_id tensor_o.
-
-(*
-Definition homS (A:UU0) := fun (S:UU0) => (A -> S).
-Definition actmh (A:UU0)(X Y: UU0):(X -> Y) -> homS A X -> homS A Y := fun (f: X -> Y) => fun (m: A ->X) => f \o m.
-
-Let hom_id (A:UU0): FunctorLaws.id (@actmh A).
-Proof.
-rewrite/actmh/FunctorLaws.id => B.
-by apply functional_extensionality => x.
-Qed.
-
-Let hom_o (A:UU0) : FunctorLaws.comp (@actmh A).
-Proof.
-rewrite/actmh/FunctorLaws.comp => X Y Z g h.
-by apply functional_extensionality => x.
-Qed.
-
-HB.instance Definition _:= isFunctor.Build (@homS T) (@hom_id T) (@hom_o T).
-Variable f: nat -> nat.
-Check (tensorS nat) # f.
-*)
-
-End tensors.
-End TensorS.
-HB.export TensorS.
-
-*)
-Module TensorS.
-Section tensors.
-Variable S:UU0.
-
 Definition tensorS := fun (A: UU0) => (A * S)%type. 
 Definition actmt (X Y: UU0):(X -> Y) -> tensorS X -> tensorS Y:=(fun f: X -> Y =>  (fun xs:X * S => match xs with (x, s) => (f x, s) end)). 
-
 Let tensor_id : FunctorLaws.id actmt.
 Proof.
 rewrite/actmt/FunctorLaws.id => B. 
 apply boolp.funext => x.
 by case: x. 
 Qed.
-
 Let tensor_o : FunctorLaws.comp actmt.
 Proof.
 rewrite/actmt/FunctorLaws.comp => X Y Z g h.
 apply boolp.funext => x.
-by case: x. Qed.
-
+by case: x. 
+Qed.
 HB.instance Definition _:= isFunctor.Build tensorS tensor_id tensor_o.
-
-(*
-Definition homS (A:UU0) := fun (S:UU0) => (A -> S).
-Definition actmh (A:UU0)(X Y: UU0):(X -> Y) -> homS A X -> homS A Y := fun (f: X -> Y) => fun (m: A ->X) => f \o m.
-
-Let hom_id (A:UU0): FunctorLaws.id (@actmh A).
-Proof.
-rewrite/actmh/FunctorLaws.id => B.
-by apply functional_extensionality => x.
-Qed.
-
-Let hom_o (A:UU0) : FunctorLaws.comp (@actmh A).
-Proof.
-rewrite/actmh/FunctorLaws.comp => X Y Z g h.
-by apply functional_extensionality => x.
-Qed.
-
-HB.instance Definition _:= isFunctor.Build (@homS T) (@hom_id T) (@hom_o T).
-Variable f: nat -> nat.
-Check (tensorS nat) # f.
-*)
-
 End tensors.
 End TensorS.
 HB.export TensorS.
-
 
 Module HomS.
 Section homs.
 Variable S:UU0.
-
 Definition homS := fun (A:UU0) => (S -> A).
 Definition actmh (X Y: UU0):(X -> Y) -> homS X -> homS Y := fun (f: X -> Y) => fun (m: S ->X) => f \o m.
-
 Let hom_id : FunctorLaws.id actmh.
 Proof.
 rewrite/actmh/FunctorLaws.id => B.
 by apply boolp.funext => x.
 Qed.
-
 Let hom_o : FunctorLaws.comp actmh.
 Proof.
 rewrite/actmh/FunctorLaws.comp => X Y Z g h.
 by apply boolp.funext => x.
 Qed.
-
 HB.instance Definition _:= isFunctor.Build homS hom_id hom_o.
-
 End homs.
 End HomS.
 HB.export HomS.
@@ -1438,623 +1368,117 @@ HB.export HomS.
 Module StateTdelay.
 Section stateTdelay.
 Variable S: UU0.
-
 Definition DS := MS S Delay.
-Print DS.
-
 Lemma DSE {X}: DS X  = (homS S \o Delay \o tensorS S) X.
-Proof.
-rewrite/DS/MS/homS/tensorS => //=.
-Qed.
-
-Lemma testhomS {A B} (f: A -> B) (m:S -> A) : (homS S # f) m = f \o m.
-Proof.
-simpl.
-by [].
-Qed.
-
-
-
+Proof. by rewrite/DS/MS/homS/tensorS => //=. Qed.
+Lemma homSmap {A B} (f: A -> B) (m:S -> A) : (homS S # f) m = f \o m.
+Proof. by []. Qed.
+Lemma tensorSmap {A B} (f: A -> B) (m: tensorS S A) : (tensorS S # f) m = let (a, s) := m in (f a, s).
+Proof. by []. Qed.
 Lemma actm_bind (A B : UU0) (f : A -> B) (m : Delay A): 
  (Delay # f) m = m >>= (@ret Delay B  \o f).
-Proof.
-simpl.
-rewrite/actm.
-simpl. by []. Qed.
-
-
-
-Lemma DSEmap {X Y} (f: X -> Y): DS # f = (homS S \o Delay \o tensorS S) # f.
+Proof. by rewrite //= /actm //=. Qed.
+Lemma DSmapE {X Y} (f: X -> Y): DS # f = (homS S \o Delay \o tensorS S) # f.
 Proof.
 apply boolp.funext => x.
-rewrite -compA.
-rewrite! FCompE. simpl.
-rewrite testhomS.
-apply boolp.funext => s.
-simpl.
+rewrite -compA FCompE FCompE //= homSmap.
+apply boolp.funext => s //=.
 rewrite actm_bind.
 unfold "#".
-simpl.
-rewrite/bindS/retS.
-simpl.
-rewrite/uncurry/curry.
+rewrite //= /bindS/retS //= /uncurry /curry.
 congr bind.
 apply boolp.funext => xs.
-case: xs => x' s' //=.
+by case: xs => x' s' //=.
 Qed.
-
-Definition dist1 { X Y } (s:tensorS S (Y + X)) :(tensorS S Y) + (tensorS S X) := let (yx, s) := s in match yx with |inl y => inl (y,s) | inr x => inr (x,s) end.
-Definition dist2 { X Y } (xy: (tensorS S Y) + (tensorS  S X)): tensorS S (Y + X) := match xy with | inl (y, s) => (inl y,s) | inr (x, s) => (inr x,s) end. 
-
-Definition unitS { X }: X -> homS S (tensorS S X) := fun (x: X) => fun (s: S) => (x, s).
-
-(*curryとuncurry*)
-Print curry.
-Definition adjlr {X Y}:((tensorS S X) -> Y) -> (X -> (homS S Y)) := fun f => ((homS S) # f) \o (@unitS X).
-
+Definition dist1 {X Y} (s:tensorS S (Y + X)) :(tensorS S Y) + (tensorS S X) := let (yx, s) := s in 
+                                                                                 match yx with |inl y => inl (y,s) | inr x => inr (x,s) end.
+Definition dist2 {X Y} (xy: (tensorS S Y) + (tensorS  S X)): tensorS S (Y + X) := match xy with | inl (y, s) => (inl y,s) | inr (x, s) => (inr x,s) end. 
+Definition unitS {X}: X -> homS S (tensorS S X) := fun (x: X) => fun (s: S) => (x, s).
 Definition counitS {X}: tensorS S (homS S X) -> X:= fun fs => let (f,s) := fs in f s.
-
-Definition adjrl {X Y}:(X -> (homS S Y)) -> ((tensorS S X) -> Y) := fun f => (@counitS Y) \o ((tensorS S) # f).
-
-Lemma testtensorS {A B} (f: A -> B) (m: tensorS S A) : (tensorS S # f) m = let (a, s) := m in (f a, s).
-Proof. by []. Qed.
-
-Definition whileDS {X Y} (body: X -> homS S (Delay (tensorS S (Y + X)))) := adjlr (while ((Delay # ( (@dist1 X Y )) \o (adjrl body)))).
-
-
+(*curry*)
+Definition adjlr {X Y}:((tensorS S X) -> Y) -> (X -> (homS S Y)) := fun f => homS S # f \o unitS.
+(*uncurry*)
+Definition adjrl {X Y}:(X -> (homS S Y)) -> ((tensorS S X) -> Y) := fun f => counitS \o tensorS S # f.
+Definition whileDS {X Y} (body: X -> homS S (Delay (tensorS S (Y + X)))) := adjlr (while (Delay # dist1 \o adjrl body)).
 Definition wBisimDS {A} (ds1 ds2:DS A): Prop := forall s:S, wBisim (ds1 s) (ds2 s).
-
-Lemma adjlr_preserve {A B} (f g: tensorS S A -> Delay (tensorS S B)): (forall s a, wBisim (f (s, a)) (g (s, a))) -> (forall a, wBisimDS ((adjlr f) a) ((adjlr g) a)).
+Lemma adjlr_preserve {A B} (f g: tensorS S A -> Delay (tensorS S B)): (forall s a, wBisim (f (s, a)) (g(s, a))) -> forall a, wBisimDS (adjlr f a) (adjlr g a).
 Proof.
-move => H a.
-rewrite/wBisimDS/adjlr => s.
-simpl.
-rewrite testhomS testhomS.
-simpl.
-rewrite/unitS.
-apply H.
+rewrite/wBisimDS/adjlr => H a s //=.
+by rewrite homSmap homSmap //= /unitS.
 Qed.
-
-Lemma fixpointDSE'1 {X A}  (f: X -> DS (A + X)%type) : 
-forall (x: X), ( f x >>= (sum_rect (fun => DS A ) (@ret DS A ) (whileDS f))) =  join A  ((DS # (sum_rect (fun => DS A ) (@ret DS A ) (whileDS f))) (f x) ).
-Proof.
-move => x.
-by rewrite bindE.
-Qed.
-
-Lemma joinE {A} : (@join DS) A  = (homS S # ((@join Delay) (tensorS S A) ) ) \o ((homS S \o Delay) # (@counitS(((Delay \o (tensorS S)) A)))) .
+Lemma joinE {A}: (@join DS) A  = (homS S # ((@join Delay) (tensorS S A) ) ) \o ((homS S \o Delay) # counitS ) .
 Proof.
 apply boolp.funext => m.
 apply boolp.funext => s.
-rewrite FCompE.
-simpl.
-rewrite! testhomS.
-simpl.
-rewrite actm_bind.
+rewrite FCompE //= homSmap homSmap //= actm_bind.
 have -> : (cofix bind_ (u : Delay (Delay (tensorS S A))) : Delay (tensorS S A) := match u with
                                                                                              | DNow x => x
                                                                                              | DLater m' => DLater (bind_ m')
                                                                                              end) (m s >>= (DNow (A:=Delay (tensorS S A)) \o counitS ))
 = (m s >>= (@ret Delay _ \o counitS)) >>= idfun.
   by [].
-rewrite bindA.
-simpl.
+rewrite bindA //=.
 congr bind.
 apply boolp.funext => xs.
-rewrite bindretf.
-simpl.
-rewrite/counitS/uncurry.
-simpl. 
-by case: xs => a b.
+by rewrite bindretf //= /counitS/uncurry //=.
 Qed.
-
-
-
 Lemma sumrectDSE' {A X}(f: X -> DS (A + X)%type) : 
-  (((homS S \o Delay) # (@counitS (((Delay \o (tensorS S)) A)))) \o (((((*homS S \o Delay \o tensorS S*) DS )) # (sum_rect (fun =>  DS A) ((@ret DS A)) ((homS S # (while ((Delay # (@dist1 X A) \o (adjrl f))))) \o (@unitS X)))))) 
-= ((homS S \o Delay ) # ((@counitS (((Delay \o (tensorS S)) A))) \o (tensorS S # (sum_rect (fun =>  DS A) ((@ret DS A)) ((homS S # (while ((Delay # (@dist1 X A) \o (adjrl f))))) \o (@unitS X)))))).
+  (homS S \o Delay) # counitS \o  DS # sum_rect (fun =>  DS A) Ret (homS S # while ((Delay # dist1 \o adjrl f)) \o unitS )
+= (homS S \o Delay) # (counitS \o tensorS S # (sum_rect (fun =>  DS A) Ret (homS S # while ((Delay # dist1 \o adjrl f)) \o unitS))).
 Proof.
-rewrite DSEmap.
-by rewrite functor_o.
+by rewrite DSmapE functor_o.
 Qed.
-
 Lemma sumrectDSE'' {A X}(f: X -> DS (A + X)%type):
-((@counitS (((Delay \o (tensorS S)) A))) \o (tensorS S # (sum_rect (fun =>  DS A) ((@ret DS A)) ((homS S # (while ((Delay # (dist1) \o (adjrl f))))) \o (unitS))))) =  (sum_rect (fun => ((Delay \o tensorS S) A)) (@ret Delay (tensorS S A)) (while ((Delay # (dist1) \o (adjrl f))))) \o dist1.
-Proof.
-apply boolp.funext => ts.
-case: ts => ax s.
-simpl. 
-case: ax => [a|x].
-by simpl.
-simpl.
-rewrite/unitS testhomS.
-by simpl.
-Qed.
-
+counitS \o (tensorS S # (sum_rect (fun => DS A) Ret (homS S # (while ((Delay # dist1 \o adjrl f))) \o unitS))) =  
+ sum_rect (fun => (Delay \o tensorS S) A) Ret (while (Delay # dist1 \o adjrl f)) \o dist1.
+Proof. apply boolp.funext => ts; case: ts => ax s //=; case: ax => [a|x] //=. Qed.
 Lemma sumrectDSE {A X}  (f: X -> DS (A + X)%type) : 
-  (((homS S \o Delay) # (@counitS (((Delay \o (tensorS S)) A)))) \o (((*homS S \o Delay \o tensorS S*) DS # (sum_rect (fun =>  DS A) ((@ret DS A)) ((homS S # (while ((Delay # (dist1) \o (adjrl f))))) \o (unitS))))))  = ((homS S \o Delay) # (sum_rect (fun => ((Delay \o tensorS S) A)) (@ret Delay (tensorS S A)) ((while (( (Delay # (dist1)) \o (adjrl f)))))) \o  ((homS S \o Delay) # dist1)).
+  (homS S \o Delay) # counitS \o  DS # sum_rect (fun =>  DS A) Ret (homS S # while ((Delay # dist1 \o adjrl f)) \o unitS )  = 
+(homS S \o Delay) # sum_rect (fun => (Delay \o tensorS S) A) Ret (while ((Delay # dist1 \o adjrl f))) \o  (homS S \o Delay) # dist1.
 Proof.
-rewrite sumrectDSE'.
-rewrite -functor_o.
-by rewrite sumrectDSE''.
-Qed.
-(*
-Lemma sumrectDSE'' {A X}(f: X -> DS (A + X)%type):
-((@counitS (((Delay \o (tensorS S)) A))) \o (tensorS S # (sum_rect (fun =>  DS A) ((@ret DS A)) ((homS S # (while ((Delay # (dist1) \o (adjrl f))))) \o (unitS))))) = ( (sum_rect (fun => ((Delay \o tensorS S) A)) (@ret Delay (tensorS S A)) (while ((Delay # (dist1) \o (adjrl f))))) \o  dist1).
-Proof.
-apply boolp.funext => ts.
-case: ts => ax s.
-simpl. 
-case: ax => [a|x].
-by simpl.
-simpl.
-rewrite/unitS testhomS.
-by simpl.
-Qed.
-
-
-
-
-
-Lemma sumrectDSE {A X}  (f: X -> DS (A + X)%type) : 
-  (((homS S \o Delay) # (@counitS (((Delay \o (tensorS S)) A)))) \o (((*homS S \o Delay \o tensorS S*) DS # (sum_rect (fun =>  DS A) ((@ret DS A)) ((homS S # (while ((Delay # (dist1) \o (adjrl f))))) \o (unitS))))))  = ((homS S \o Delay) # (sum_rect (fun => ((Delay \o tensorS S) A)) (@ret Delay (tensorS S A)) ((while (( (Delay # (dist1)) \o (adjrl f))))) \o  dist1)).
-Proof.
-rewrite sumrectDSE'.
-by rewrite sumrectDSE''.
-Qed.
-
-*)
-
+by rewrite sumrectDSE' -functor_o sumrectDSE''. Qed.
 Lemma tunitl  {A X}  (f: X -> DS (A + X)%type) :
- ((homS S \o Delay) # dist1) \o f = ((homS S \o Delay) # dist1) \o (homS S # (adjrl f)) \o unitS.
-Proof.
-apply boolp.funext => x.
-by rewrite/unitS //= testhomS => //=. Qed.
-
+ ((homS S \o Delay) # dist1) \o f = ((homS S \o Delay) # dist1) \o (homS S # adjrl f) \o unitS.
+Proof. apply boolp.funext => x; rewrite/unitS //= testhomS => //=. Qed.
 Lemma tildaf {A X} (f: X -> DS (A + X)%type) :
- ((homS S \o Delay) # dist1) \o (homS S # (adjrl f)) = homS S # ((Delay # (dist1)) \o (adjrl f)).
-Proof.
-apply boolp.funext => x. 
-simpl.
-rewrite! testhomS.
-rewrite FCompE.
-rewrite! testhomS.
-apply boolp.funext => s.
-simpl.
-by [].
-Qed.
-
-Lemma fixpointDSE'2 {A X} (f: X -> DS (A + X)) (sx: tensorS S X): wBisim (((@join Delay) (tensorS S A)  \o (Delay # (sum_rect (fun => ((Delay \o tensorS S) A)) (@ret Delay (tensorS S A)) ((while (( (Delay # (dist1)) \o (adjrl f))))))) \o ((Delay # (dist1)) \o (adjrl f))) sx) (while (((Delay # (dist1)) \o (adjrl f))) sx).
+ ((homS S \o Delay) # dist1) \o (homS S # adjrl f) = homS S # ((Delay # dist1) \o adjrl f).
+Proof. by apply boolp.funext => x //= homSmap homSmap FCompE homSmap homSmap. Qed.
+Lemma fixpointDSE' {A X} (f: X -> DS (A + X)) (sx: tensorS S X): wBisim (((@join Delay) _ \o (Delay # (sum_rect (fun => (Delay \o tensorS S) A) Ret (while (Delay # dist1 \o adjrl f)))) \o (Delay # dist1 \o adjrl f)) sx) (while ((Delay # dist1 \o adjrl f)) sx).
 Proof.
 rewrite! compE.
 set g := Delay # _ \o _ _. 
-rewrite -bindE.
-simpl.
-rewrite wBisim_sym.
-apply fixpointE.
+rewrite -bindE //= wBisim_sym.
+by apply fixpointE.
 Qed.
-
-Lemma fixpointDSE' {A X} (f: X -> DS (A + X)) (x: X): ( f x >>= (sum_rect (fun => DS A ) (@ret DS A ) (whileDS f))) = adjlr(
-((Join \o Delay # sum_rect (fun=> (Delay \o tensorS S) A) Ret (while (Delay # dist1 \o adjrl f))) \o (Delay # dist1 \o adjrl f))) x.
-
-(*adjlr (((@join Delay) (tensorS S A)) \o (Delay # (@counitS ((Delay \o (tensorS S)) A))) \o ((Delay \o tensorS S) # (sum_rect (fun =>  DS A) ((@ret DS A)) ((homS S # (while ((Delay # (dist1) \o (adjrl f))))) \o (unitS)))) \o (adjrl f ) ) x.*)
+Lemma fixpointDSE'' {A X} (f: X -> DS (A + X)) (x: X): ( f x >>= (sum_rect (fun => DS A ) Ret (whileDS f))) = 
+adjlr(((Join \o Delay # sum_rect (fun=> (Delay \o tensorS S) A) Ret (while (Delay # dist1 \o adjrl f))) \o (Delay # dist1 \o adjrl f))) x.
 Proof.
-rewrite fixpointDSE'1.
-rewrite joinE.
-rewrite -[LHS]compE.
+rewrite bindE joinE -[LHS]compE.
 set g := homS S # Join.
-rewrite -(compA g ((homS S \o Delay) # counitS)  (DS # sum_rect (fun=> DS A) Ret (whileDS f))).
-rewrite sumrectDSE.
-rewrite -[LHS]compE.
+rewrite -(compA g ((homS S \o Delay) # counitS)  (DS # sum_rect (fun=> DS A) Ret (whileDS f))) sumrectDSE -[LHS]compE.
 set h := (homS S \o Delay ) # _ .
 set k := (homS S \o Delay ) # _ .
-rewrite -(compA g (h \o k) f).
-rewrite -(compA  h k f).
+rewrite -(compA g (h \o k) f) -(compA h k f).
 subst k.
-rewrite tunitl.
-rewrite tildaf.
+rewrite tunitl tildaf.
 subst g h.
 rewrite FCompE.
 set p := DelayMonad_Delay__canonical__hierarchy_Functor #  _.
 set q := Delay # dist1 \o _.
-rewrite compA compA.
-rewrite -functor_o -functor_o.
-by rewrite/adjlr.
+by rewrite compA compA -functor_o -functor_o /adjlr.
 Qed.
-
-Lemma fixpointDSE {A B} (f: A -> DS (B + A)%type):forall (a:A), wBisimDS (whileDS f a) ( f a >>= (sum_rect (fun => DS B ) (@ret DS B ) (whileDS f))).
+Lemma fixpointDSE {A B} (f: A -> DS (B + A)%type):forall (a:A), wBisimDS (whileDS f a) ( f a >>= (sum_rect (fun => DS B ) Ret (whileDS f))).
 Proof.
 move => a.
-rewrite/whileDS.
-rewrite fixpointDSE'.
+rewrite/whileDS fixpointDSE''.
 apply adjlr_preserve.
 move => s a0.
 rewrite wBisim_sym.
-apply fixpointDSE'2.
+apply fixpointDSE'.
 Qed.
-
-
-
-
-
-
-
-(*
-Module StateTdelay.
-Section stateTdelay.
-Variable S: UU0.
-(*adjlr:hom(tensorS X, Y) -> hom(X, homS Y)*)
-
-Definition DS := homS S \o Delay \o tensorS S.
-
-Definition dist1 { X Y } (s:tensorS S (Y + X)) :(tensorS S Y) + (tensorS S X) := let (s, yx) := s in match yx with |inl y => inl (s,y) | inr x => inr (s,x) end.
-Definition dist2 { X Y } (xy: (tensorS S Y) + (tensorS  S X)): tensorS S (Y + X) := match xy with | inl (s, y) => (s, inl y) | inr (s, x) => (s, inr x) end. 
-
-Definition unitS { X }: X -> homS S (tensorS S X) := fun (x: X) => fun (s: S) => (s, x).
-
-Definition adjlr {X Y}:((tensorS S X) -> Y) -> (X -> (homS S Y)) := fun f => ((homS S) # f) \o (@unitS X).
-
-Definition counitS {X}: tensorS S (homS S X) -> X:= fun sf => let (s,f) := sf in f s.
-
-Definition adjrl {X Y}:(X -> (homS S Y)) -> ((tensorS S X) -> Y) := fun f => (@counitS Y) \o ((tensorS S) # f).
-
-Definition retDS (X: UU0): X -> DS X:= fun (x:X) => (fun (s:S) => @ret Delay _ (s, x)).
-
-(*
-Definition retDS {S} (X: UU0): X -> DS X:= (homS S # (@ret (tensorS S X))) \o unitS.
-Print join.
-
-Definition bindDS {S} (X Y: UU0): DS X -> (X -> DS Y) -> DS Y :=
-fun m => fun f => ((homS S # (fun m' => (m' >>= idfun))) \o (homS S \o Delay) # counitS ) ((DS # f) m).
-*)
-
-Definition bindDS (X Y: UU0): DS X -> (X -> DS Y) -> DS Y :=
- fun m => fun f => (fun (s:S) => ((m s) >>= (fun xs => f (snd xs) (fst xs)))).
-
-(*
-
-Lemma testfg {A B} (f g: functor) (k : A -> B): (f \o g) # k = f # (g # k).
-Proof.
-by rewrite FCompE. Qed.
-
-Lemma testcomp {A B C} (f: A -> B) (g: B -> C) (a: A): (g \o f) a = g (f a).
-by []. Qed.
-
-Lemma testhomS {A B} (f: A -> B) (m:S -> A) : (homS S # f) m = f \o m.
-Proof.
-simpl.
-by [].
-Qed.
-
-
-
-Lemma actm_bind (A B : UU0) (f : A -> B) (m : Delay A): 
- (Delay # f) m = m >>= (@ret _  \o f).
-Proof.
-simpl.
-rewrite/actm.
-simpl. by []. Qed.
-
-Let left_neutral : BindLaws.left_neutral (@bindDS S) (@retDS S).
-Proof.
-rewrite/BindLaws.left_neutral/bindDS/retDS => A B a f //=.
-rewrite testfg.
-rewrite! testhomS.
-apply functional_extensionality => s.
-simpl. 
-rewrite actm_bind.
-rewrite/DS.
-rewrite testfg.
-rewrite FCompE.
-rewrite! testhomS.
-simpl.
-rewrite actm_bind.
-rewrite bindretf.
-simpl.
-by rewrite! bindretf.
-Qed.
-
-Let right_neutral : BindLaws.right_neutral (@bindDS S) (@retDS S).
-Proof.
-rewrite/BindLaws.right_neutral/bindDS/retDS => A m.
-rewrite! testfg.
-rewrite! testhomS.
-rewrite -functor_o.
-rewrite testhomS.
-apply functional_extensionality => s.
-simpl.
-rewrite actm_bind.
-rewrite actm_bind.
-rewrite/counitS.
-rewrite bindA.
-have -> : (ret (A:=tensorS S (DS A)) \o
-       TensorS_tensorS__canonical__hierarchy_Functor S # (homS S # ret (A:=tensorS S A) \o unitS)) = (@ret (tensorS S (DS A))).
-
-rewrite bindmret.
-have -> : (fun xs : tensorS S A => ret (xs.1, xs.2)) = (@ ret (tensorS S A)).
-  apply functional_extensionality => xs.
-  by case: xs => //=.  
-by rewrite bindmret.
-Qed.
-
-Let associative : BindLaws.associative (@bindDS S).
-Proof.
-rewrite/BindLaws.associative/bindDS => A B C m f g.
-apply functional_extensionality => s.
-by rewrite bindA //=.
-Qed.
-
-*)
-
-Let left_neutral : BindLaws.left_neutral bindDS retDS.
-Proof.
-rewrite/BindLaws.left_neutral/bindDS/retDS => A B a f //=.
-apply boolp.funext => s.
-by rewrite bindretf //=.
-Qed.
-
-Let right_neutral : BindLaws.right_neutral bindDS retDS.
-Proof.
-rewrite/BindLaws.right_neutral/bindDS/retDS => A m.
-apply boolp.funext => s.
-have -> : (fun xs : tensorS S A => @ret _ _ (xs.1, xs.2)) = (@ret Delay (tensorS S A)).
-  apply boolp.funext => xs.
-  by case: xs => //=.  
-by rewrite bindmret.
-Qed.
-
-Let associative : BindLaws.associative bindDS.
-Proof.
-rewrite/BindLaws.associative/bindDS => A B C m f g.
-apply boolp.funext => s.
-by rewrite bindA //=.
-Qed.
-
-HB.instance Definition _ :=
-  isMonad_ret_bind.Build DS left_neutral right_neutral associative.
-
 End stateTdelay.
 End StateTdelay.
-HB.export StateTdelay.
 
-Module ModelMonadStateDelay.
-Section modelmonadstateDelay.
-Variable S: UU0.
-
-Lemma actm_bindE (A B :UU0) (f: A -> B) (m: Delay A) : 
-(Delay # f) m = m >>= (@ret _ _ \o f).
-Proof.
-by [].
-Qed.
-
-Lemma testcomp {A B C} (f: A -> B) (g: B -> C) (a: A): (g \o f) a = g (f a).
-by []. Qed.
-
-Lemma testhomS {A B} (f: A -> B) (m:S -> A) : (homS S # f) m = f \o m.
-Proof.
-by [].
-Qed.
-
-Lemma testtensorS {A B} (f: A -> B) (m: tensorS S A) : (tensorS S # f) m = let (s, a) := m in (s, f a).
-Proof. by []. Qed.
-Print dist1.
-
-Definition whileDS {X Y} (body: X -> homS S (Delay (tensorS S (Y + X)))) := adjlr (while ((Delay # ( (@dist1 S X Y)) \o (adjrl body)))).
-
-
-
-Definition wBisimDS {A} (ds1 ds2:DS S A): Prop := forall s:S, ds1 s ≈ ds2 s.
-
-Lemma adjlr_preserve {A B} (f g: tensorS S A -> Delay (tensorS S B)): (forall s a, f (s, a) ≈ g (s, a)) -> (forall a, wBisimDS ((adjlr f) a) ((adjlr g) a)).
-Proof.
-move => H a.
-rewrite/wBisimDS/adjlr => s.
-simpl.
-rewrite testhomS testhomS.
-simpl.
-rewrite/unitS.
-apply H.
-Qed.
-
-Lemma fixpointDSE'1 {A B}  (f: A -> DS S (B + A)%type) : 
-forall (a: A), ( f a >>= (sum_rect (fun => DS S B ) (@retDS S B ) (whileDS f))) =  join B  ((DS S # (sum_rect (fun => DS S B ) (@retDS S B ) (whileDS f))) (f a) ).
-Proof.
-move => a.
-by rewrite bindE.
-Qed.
-
-Lemma joinE {A} : (@join (DS S)) A  = (homS S # ((@join Delay) (tensorS S A) ) ) \o ((homS S \o Delay) # (@counitS S (((Delay \o (tensorS S)) A)))) .
-Proof.
-apply boolp.funext => m.
-apply boolp.funext => s.
-rewrite FCompE.
-rewrite! testcomp.
-rewrite! testhomS.
-rewrite testcomp.
-simpl.
-rewrite actm_bindE.
-have -> : (cofix bind_ (u : Delay (Delay (tensorS S A))) : Delay (tensorS S A) := match u with
-                                                                                             | DNow x => x
-                                                                                             | DLater m' => DLater (bind_ m')
-                                                                                             end) (m s >>= (DNow (A:=Delay (tensorS S A)) \o counitS (S:=S)))
-= (m s >>= (@ret Delay _ \o counitS (S := S))) >>= idfun.
-  by [].
-rewrite bindA.
-simpl.
-congr bind.
-apply boolp.funext => xs.
-rewrite bindretf.
-simpl.
-rewrite/counitS.
-simpl. 
-by case: xs => a b.
-Qed.
-
-(*
-Lemma joinE {A} : forall  m: DS (DS A),  (@join DS) A m = (homS S # ((@join Delay) (tensorS S A) ) )  (((homS S \o Delay) # (@counitS S (((Delay \o (tensorS S)) A)))) m).
-Proof.
-move => m.
-apply functional_extensionality => s.
-rewrite! testhomS.
-rewrite testcomp.
-rewrite FCompE.
-rewrite testhomS.
-simpl.
-rewrite actm_bindE.
-rewrite /bindDS.
-simpl.
-have H : bind (m s >>= (ret (A:=Delay (tensorS S A)) \o counitS)) idfun = (m s >>= (ret (A:=Delay (tensorS S A)) \o counitS)) >>= idfun.
- by [].
-rewrite H.
-rewrite bindA.
-simpl.
-congr bind.
-apply functional_extensionality => xs.
-rewrite bindretf.
-simpl.
-rewrite/counitS.
-simpl. case: xs => a b.
-by []. Qed.*)
-
-Lemma DSE {A X} (f: X -> A):DS S # f = (homS S \o Delay \o tensorS S) # f.
-Proof.
-rewrite/DS.
-apply boolp.funext => x.
-rewrite FCompE.
-Lemma sumrectDSE' {A X}(f: X -> DS S (A + X)%type) : 
-  (((homS S \o Delay) # (@counitS S (((Delay \o (tensorS S)) A)))) \o (((((*homS S \o Delay \o tensorS S*) DS S )) # (sum_rect (fun =>  DS S A) ((@retDS S A)) ((homS S # (while ((Delay # (@dist1 S X A) \o (adjrl f))))) \o (@unitS S X)))))) 
-= ((homS S \o Delay ) # ((@counitS S (((Delay \o (tensorS S)) A))) \o (tensorS S # (sum_rect (fun =>  DS S A) ((@retDS S A)) ((homS S # (while ((Delay # (@dist1 S X A) \o (adjrl f))))) \o (@unitS S X)))))).
-Proof.
-rewrite functor_o.
-rewrite/DS.
-simpl. 
-set g := sum_rect _ _ _.
-have H: ((DS S) # g) = ((homS S \o Delay) # (tensorS S # g)) .
- rewrite/DS.
- rewrite -compA.
- apply boolp.funext => x.
- rewrite! FCompE.
-
- 
- by [].
-rewrite -H.
-reflexivity.
-Qed.
-
-(*
-Lemma sumrectDSE' {A X}(f: X -> DS (A + X)%type) : 
-  (((homS S \o Delay) # (@counitS S (((Delay \o (tensorS S)) A)))) \o (((homS S \o Delay \o tensorS S ) # (sum_rect (fun =>  DS A) ((@retDS S A)) ((homS S # (while ((Delay # (dist1) \o (adjrl f))))) \o (unitS))))))= ((homS S \o Delay ) # ((@counitS S (((Delay \o (tensorS S)) A))) \o (tensorS S # (sum_rect (fun =>  DS A) ((@retDS S A)) ((homS S # (while ((Delay # (dist1) \o (adjrl f))))) \o (unitS)))))).
-Proof.
-by rewrite -functor_o.
-Qed.
-*)
-
-Lemma sumrectDSE'' {A X}(f: X -> DS (A + X)%type):
-((@counitS S (((Delay \o (tensorS S)) A))) \o (tensorS S # (sum_rect (fun =>  DS A) ((@retDS S A)) ((homS S # (while ((Delay # (dist1) \o (adjrl f))))) \o (unitS))))) = ( (sum_rect (fun => ((Delay \o tensorS S) A)) (@DNow (tensorS S A)) (while ((Delay # (dist1) \o (adjrl f))))) \o  dist1).
-Proof.
-apply functional_extensionality => ts.
-case: ts => s ax.
-simpl. 
-case: ax => [a|x].
-by simpl.
-simpl.
-rewrite/unitS testhomS.
-by simpl.
-Qed.
-
-Lemma sumrectDSE {A X}  (f: X -> DS (A + X)%type) : 
-  (((homS S \o Delay) # (@counitS S (((Delay \o (tensorS S)) A)))) \o (((homS S \o Delay \o tensorS S) # (sum_rect (fun =>  DS A) ((@retDS S A)) ((homS S # (while ((Delay # (dist1) \o (adjrl f))))) \o (unitS))))))  = ((homS S \o Delay) # (sum_rect (fun => ((Delay \o tensorS S) A)) (@DNow (tensorS S A)) ((while ((Delay # (dist1) \o (adjrl f))))) \o  dist1)).
-Proof.
-rewrite sumrectDSE'.
-by rewrite sumrectDSE''.
-Qed.
-
-Lemma tunitl  {A X}  (f: X -> DS (A + X)%type) :
- f = (homS S # (adjrl f)) \o unitS.
-Proof.
-apply functional_extensionality => x.
-by rewrite/unitS //= testhomS => //=. Qed.
-
-
-
-
-
-(*
-Lemma sumrectDSE {A X}  (f: X -> DS (A + X)%type) (m : (homS S \o Delay \o tensorS S) (((A + X)%type))): 
-  ((homS S \o Delay) # (@counitS S (((Delay \o (tensorS S)) A)))) (((homS S \o Delay \o tensorS S) # (sum_rect (fun =>  DS A) ((@retDS S A)) ((homS S # (while ((Delay # (dist1) \o (adjrl f))))) \o (unitS)))) m) = ((homS S \o Delay) # (sum_rect (fun => ((Delay \o tensorS S) A)) (@DNow (tensorS S A)) (while ((Delay # (dist1) \o (adjrl f)))))) ( (( homS S \o Delay) # dist1) m).
-Proof.
-apply functional_extensionality => s.
-simpl.
-rewrite! FCompE.
-rewrite! testhomS.
-simpl.
-rewrite! actm_bindE.
-rewrite testtensorS.
-
-Lemma joinE {A} : forall  m: DS (DS A),  (@join DS) A m = (homS S # ((@join Delay) (tensorS S A) ) ) \o ((homS S \o Delay) # (@counitS S (((Delay \o (tensorS pS)) A)))) m.
-
-*)
-
-(*
-
-Lemma fixpointDSE' {A X} (f: X -> DS (A + X)) (x: X): ( f x >>= (sum_rect (fun => DS A ) (@retDS S A ) (whileDS f))) = adjlr (((@join Delay) (tensorS S A)) \o (Delay # (@counitS S ((Delay \o (tensorS S)) A))) \o ((Delay \o tensorS S) # (sum_rect (fun =>  DS A) ((@retDS S A)) ((homS S # (while ((Delay # (dist1) \o (adjrl f))))) \o (unitS)))) \o (adjrl f ) ) x.
-Proof.
-rewrite fixpointDSE'1.
-rewrite joinE /adjlr.
-rewrite/DS.
-rewrite sumrectDSE.
-
-
-
- (((homS S \o Delay) # (@counitS S (((Delay \o (tensorS S)) A)))) \o (((homS S \o Delay \o tensorS S) # (sum_rect (fun =>  DS A) ((@retDS S A)) ((homS S # (while ((Delay # (dist1) \o (adjrl f))))) \o (unitS))))))  = ((homS S \o Delay) # (sum_rect (fun => ((Delay \o tensorS S) A)) (@DNow (tensorS S A)) ((while ((Delay # (dist1) \o (adjrl f))))) \o  dist1))
-
-
-Lemma fixpointDSE' {A B}  (f: A -> DS (B + A)%type) : join B  (((DS # (sum_rect (fun => DS B ) (@retDS S B ) (whileDS f))) (f a) )) = 
-
-
-Lemma fixpointDSE {A B} (f: A -> DS (B + A)%type):forall (a:A), wBisimDS (whileDS f a) ( f a >>= (sum_rect (fun => DS B ) (@retDS S B ) (whileDS f))).
-
-(*adjrl:hom(X, homS Y) -> hom(tensorS X, Y)*)
-
-*)
-
-End modelmonadstateDelay.
-End ModelMonadStateDelay.
-
-Module StateDelayExample.
-Section statedelayexample.
-
-Definition getDS(u:unit) :DS nat nat := fun s => DNow (s,s).
-Definition putDS(n:nat):DS nat unit := fun (s:nat) => DNow (n, tt).
-Definition sumds_body:nat -> DS nat (unit + nat) := fun (m:nat) => bindDS (bindDS (getDS tt) (fun n => putDS ( n + m ))) 
-(fun _ => match m with
-           |O => (fun s => DNow (s,inl tt ))
-           |m'.+1 => (fun s => DNow ( s, inr m' ))
-         end).
-Definition sumds := whileDS sumds_body.
-Definition stepsDS {S A}  (n:nat) (m: DS A): DS A := fun (s:S) => steps n (m s).
-Compute (stepsDS 20 (sumds 10)) 0. 
-
-
-
-End statedelayexample.
-End StateDelayExample.
-
-
-Module ModelMonadStateDelay.
-Section modelmonadstateDelay.
-Variable S: UU0.
-Let N: monad := Delay.
-Definition M: stateMonad S := [the stateMonad S of MS S N].
-Print Get.
-
-
-End modelmonadstateDelay.
-End ModelMonadStateDelay.
-
-*)
-
-      
 Module SetMonad.
 Section setmonad.
 Local Open Scope classical_set_scope.
