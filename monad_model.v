@@ -1380,8 +1380,7 @@ Proof.
 apply boolp.funext => x.
 rewrite -compA FCompE FCompE //= homSmap.
 apply boolp.funext => s //=.
-rewrite actm_bind.
-unfold "#".
+rewrite fmapE.
 rewrite //= /bindS/retS //= /uncurry /curry.
 congr bind.
 apply boolp.funext => xs.
@@ -1575,6 +1574,10 @@ case: sa => a'' s'' //=.
 simpl. 
 rewrite/adjrl //=.
 rewrite! actm_bind.
+(*
+rewrite -(compA (homS S) Delay (tensorS S)).
+rewrite FCompE.
+rewrite homSmap.*)
 have H': ((homS S \o Delay) \o tensorS S) # sum_rect (fun=> (B + A)%type) idfun inr = homS S # (Delay # (tensorS S # sum_rect (fun=> (B + A)%type) idfun inr)).
   rewrite -compA.
   by rewrite FCompE.
