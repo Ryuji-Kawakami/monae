@@ -892,10 +892,12 @@ HB.mixin Record isMonadDelay (M : UU0 -> UU0) of Monad M := {
   wBisim ((while f a) >>= g)(while (fun y => (f y) >>= (sum_rect (fun => M (C + A)%type) (M # inl \o g) (M # inr \o (@ret M A )) ) ) a);
   codiagonalE:forall (A B : UU0) (f: A -> M ((B + A) + A)%type) (a: A),
   wBisim (while ((M # ((sum_rect (fun => (B + A)%type) idfun inr)))  \o f ) a) (while (while f) a);
-  wpreserve: forall (A B : UU0) (f g: A -> M ((B + A))%type) (a: A),
-  (forall a, wBisim (f a) (g a)) -> wBisim (while f a) (while g a);
-  bpreserve: forall (A B: UU0) (f: A -> M B)(d1 d2: M A),
+  wBisim_bindmwB: forall (A B: UU0) (f: A -> M B)(d1 d2: M A),
   wBisim d1 d2 -> wBisim (d1 >>= f) (d2>>= f);
+  wBisim_bindfwB: forall (A B: UU0) (f g: A -> M B)(d: M A),
+  (forall a, wBisim (f a) (g a)) -> wBisim (d >>= f) (d >>= g);
+  wBisim_whilewB: forall (A B : UU0) (f g: A -> M ((B + A))%type) (a: A),
+  (forall a, wBisim (f a) (g a)) -> wBisim (while f a) (while g a);
 }.
 
 #[short(type=delayMonad)]
@@ -903,7 +905,6 @@ HB.structure Definition MonadDelay := {M of isMonadDelay M & }.
 
 Arguments  while {s A B}.
 Arguments  wBisim {s A}.
-Notation "a '≈' b" := (wBisim a b).
 (*
 Module Type wBisim.
 Axiom wBisim: forall (M: delayMonad) A (d1 d2: M A), Prop.
@@ -944,15 +945,15 @@ Lemma bpreserve (A B: UU0) (f: A -> M B)(d1 d2: M A):
 Proof. move => H. apply/wBisimP/bpreserve'. by apply/wBisimP/H. Qed.
 End wBisimSetoid.
 *)
-
 Add Parametric Relation (M: delayMonad) A : (M A) (@wBisim M A)
   reflexivity proved by (@wBisim_refl M A)
   symmetry proved by (@wBisim_sym M A)
   transitivity proved by (@wBisim_trans M A)
   as wBisim_rel.
-Hint Extern 0 (_ ≈ _) => setoid_reflexivity.
+Hint Extern 0 (wBisim _ _) => setoid_reflexivity.
 
 Section DelayExample.
+Notation "a '≈' b" := (wBisim a b).
 Variable M : delayMonad.
 Fixpoint fact (n:nat) :nat := match n with 
                           |O => 1
@@ -974,7 +975,6 @@ elim: n.
 - move => n IH m.
   by rewrite fixpointE //= bindretf //= IH mulnA.
 Qed.
-
 Definition collatzm_body (m:nat) (n:nat) : M (nat + nat)%type :=
   if n == 1 then ret _ (inl m)
   else if n %%2 == 0 then ret _ (inr (n./2))
@@ -990,7 +990,7 @@ set x := (x in while x).
 set y := collatzm_body (p*m).
 have <-: x = y.
   apply boolp.funext => q.
-  subst x y. 
+  subst x y.
   case_eq (q == 1) => Hs.
   + by rewrite /collatzm_body Hs bindretf //= fmapE bindretf //=.
   + rewrite/collatzm_body Hs.
@@ -1015,24 +1015,23 @@ Definition minus2_body (nm: nat*nat) : M (nat + nat*nat)%type := match nm with
                                                       |(S n', m) => ret _ (inr (n',m))
                                                       end.
 Definition minus2 := fun nm => while minus2_body nm.
-Lemma eq_minus : forall (nm: nat*nat), minus1 nm  ≈  minus2 nm. 
+Lemma eq_minus : forall (nm: nat*nat), minus1 nm  ≈  minus2 nm.
 Proof.
 move => nm.
 rewrite/minus1 /minus2.
 rewrite -codiagonalE.
-apply wpreserve.
+apply: wBisim_whilewB.
 move => [n m].
   case: n.
   + case: m => //= .
      * by rewrite fmapE bindretf.
      * move => n.
        by rewrite fmapE bindretf.
-  + move => n //=.  
+  + move => n //=.
     by rewrite fmapE bindretf.
 Qed.
-
 Definition collatzs1_body (nml: nat*nat*nat) : M ((nat*nat + nat*nat*nat))%type :=
-match nml with (n,m,l) => 
+match nml with (n,m,l) =>
 if (l %% 4 == 1) && (n == 1) then ret _ (inl (m,l))
 else if (n == 1) then ret _ (inr (m+1,m+1,0))
                  else if (n %% 2) == 0 then ret _ (inr (n./2,m,l+1))
@@ -1116,26 +1115,21 @@ Lemma eq_dividefac: forall n, dividefac1 n ≈ dividefac2 n.
 Proof.
 move => n.
 rewrite/dividefac1/dividefac2.
-apply wpreserve.
+apply wBisim_whilewB.
 move => [k l].
 case/boolP: (l %% 5 == 0) => Hl //=.
 - by rewrite Hl.
 - rewrite !ifN // bindretf.
-  rewrite bpreserve; last by apply (eq_fact_factdelay k 1).
+  rewrite wBisim_bindmwB; last by apply (eq_fact_factdelay k 1).
   by rewrite bindretf mul1n.
 Qed.
-
-Compute (1 / 2).
-
-Definition fastexp_body (nmk: nat*nat*nat) :M (nat + nat*nat*nat)%type := 
-match  nmk with (n,m,k) => if n == 0 then ret _ (inl m) 
-                           else (if odd n then ret _ (inr (n.-1 , m*k, k)) 
-                                 else ret _ (inr (n./2, m, k*k) )) end. 
+Definition fastexp_body (nmk: nat*nat*nat) :M (nat + nat*nat*nat)%type :=
+match  nmk with (n,m,k) => if n == 0 then ret _ (inl m)
+                           else (if odd n then ret _ (inr (n.-1 , m*k, k))
+                                 else ret _ (inr (n./2, m, k*k) )) end.
 Definition fastexp (n m k: nat) := while fastexp_body (n,m,k).
-
 Fixpoint exp (n k: nat) := match n with |O => 1 | S n' => k*exp n' k end.
-
-Lemma exp3E_aux (n:nat):n <= n.*2.
+Lemma expE_aux (n:nat):n <= n.*2.
 Proof.
 elim: n => //= n IH.
 rewrite doubleS.
@@ -1156,12 +1150,11 @@ elim: n {-2}n (leqnn n) => n.
   + case/boolP: (odd (m'.+1)) => Hm'.
     * by rewrite fixpointE Hm' //= bindretf //= IH //= expnSr (mulnC (k^m') k) mulnA.
     * rewrite fixpointE //= ifN //= bindretf //= IH.
-
-      ** by rewrite uphalfE mulnn -expnM mul2n (even_halfK Hm'). 
+      ** by rewrite uphalfE mulnn -expnM mul2n (even_halfK Hm').
       ** rewrite ltnS in Hmn.
          rewrite leq_uphalf_double.
          apply (leq_trans Hmn).
-         apply exp3E_aux.
+         apply expE_aux.
 Qed.
 End DelayExample.
 
@@ -1261,6 +1254,13 @@ HB.structure Definition MonadFailR0State (S : UU0) :=
 HB.structure Definition MonadNondetState (S : UU0) :=
   { M of MonadPrePlus M & MonadState S M }.
 
+(*HB.mixin Record isMonadDelayState (S: UU0) (M: monad) of MonadDelay M & MonadState S M := {}.*)
+
+#[short(type=delayStateMonad)]
+HB.structure Definition MonadDelayState (S : UU0) :=
+  { M of isMonadDelay M & isMonadState S M & isMonad M & isFunctor M }.
+
+
 HB.mixin Record isMonadStateRun (S : UU0) (N : monad)
    (M : UU0 -> UU0) of MonadState S M := {
   runStateT : forall A : UU0, M A -> S -> N (A * S)%type ;
@@ -1290,6 +1290,7 @@ HB.mixin Record isMonadExceptStateRun
 #[short(type=exceptStateRunMonad)]
 HB.structure Definition MonadExceptStateRun (S : UU0) (N : exceptMonad) :=
   {M of isMonadExceptStateRun S N M & }.
+
 
 HB.mixin Record isMonadReify (S : UU0) (M : UU0 -> UU0) of Monad M := {
   reify : forall A : UU0, M A -> S -> option (A * S)%type ;
