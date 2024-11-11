@@ -952,6 +952,10 @@ Add Parametric Relation (M: delayMonad) A : (M A) (@wBisim M A)
   as wBisim_rel.
 Hint Extern 0 (wBisim _ _) => setoid_reflexivity.
 
+#[short(type=delayExceptMonad)]
+HB.structure Definition MonadDelayExcept :=
+  { M of MonadDelay M & MonadExcept M }.
+
 Section DelayExample.
 Notation "a '≈' b" := (wBisim a b).
 Variable M : delayMonad.
@@ -1258,7 +1262,7 @@ HB.structure Definition MonadNondetState (S : UU0) :=
 
 #[short(type=delayStateMonad)]
 HB.structure Definition MonadDelayState (S : UU0) :=
-  { M of isMonadDelay M & isMonadState S M & isMonad M & isFunctor M }.
+  { M of MonadDelay M & MonadState S M }.
 
 
 HB.mixin Record isMonadStateRun (S : UU0) (N : monad)
