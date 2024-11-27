@@ -1,7 +1,6 @@
 From mathcomp Require Import all_ssreflect.
 From mathcomp Require boolp.
 From HB Require Import structures.
-Require Import hierarchy.
 Require Import monad_transformer hierarchy.
 
 Set Implicit Arguments.
@@ -54,10 +53,7 @@ Proof.
 move => a.
 rewrite/whileDE/DEA fixpointE /= fmapE /= bindA.
 apply (bindfwB _ _ _ _ (f a)) => uba.
-case: uba => [u|[b'|a']] /=.
-- by rewrite bindretf /=.
-- by rewrite bindretf /=.
-- by rewrite bindretf /=.
+case: uba => [u|[b'|a']] /=; by rewrite bindretf.
 Qed.
 Lemma naturalityDEE {A B C} (f: A -> DE (B + A)) (g: B -> DE C)(a:A):
    @bind DE _ _  (whileDE f a) g   ≈  whileDE (fun y => (f y) >>= (sum_rect (fun => DE (C + A)) (DE # inl \o g) (DE # inr \o (@ret DE A )))) a.
@@ -70,10 +66,8 @@ case: uba => [u|[b''|a'']] /=.
 - by rewrite !bindretf /= fmapE bindretf.
 - rewrite !bindretf /= fmapE /= fmapE bindA.
   apply bindfwB => uc.
-  case: uc => [u|c].
-  + by rewrite bindretf /=.
-  + by rewrite /= bindretf.
-- by rewrite bindretf /= !fmapE !bindretf /=.
+  case: uc => [u|c]; by rewrite bindretf.
+- by rewrite bindretf /= !fmapE !bindretf.
 Qed.
 Lemma codiagonalDEE {A B} (f: A -> DE ((B + A) + A))(a:A):
    whileDE ((DE # ((sum_rect (fun => (B + A)%type) idfun inr)))  \o f ) a  ≈ whileDE (whileDE f) a.
@@ -89,12 +83,9 @@ apply: wBisim_trans.
   apply whilewB => a' /=.
   rewrite !fmapE !bindA.
   apply bindfwB => ubaa.
-  case: ubaa => [u|[[b|a1]|a2]] /=.
-  * by rewrite !bindretf /= fmapE bindretf /= bindretf /=.
-  * by rewrite !bindretf /= fmapE bindretf /= bindretf /=.
-  * by rewrite !bindretf /= fmapE bindretf /= bindretf /=.
-  * by rewrite !bindretf /= fmapE bindretf /= bindretf /=.
+  case: ubaa => [u|[[b|a1]|a2]] /= ; by rewrite  !bindretf /= fmapE bindretf /= bindretf /=.
 Qed.
+
 Lemma whilewBDE {A B} (f g: A -> DE (B + A)) (a: A) : (forall a, (f a) ≈ (g a)) -> whileDE f a ≈ whileDE g a.
 Proof.
 move => Hfg.
@@ -107,3 +98,8 @@ Qed.
 HB.instance Definition _ := MonadExcept.on DE.
 HB.instance Definition _ := @isMonadDelay.Build DE
   (@whileDE) (@wBisimDE) wBisimDE_refl wBisimDE_sym wBisimDE_trans (@fixpointDEE) (@naturalityDEE) (@codiagonalDEE)  (@bindmwBDE) (@bindfwBDE) (@whilewBDE).
+
+End exceptTdelay.
+End exceptTdelay.
+HB.export exceptTdelay.
+

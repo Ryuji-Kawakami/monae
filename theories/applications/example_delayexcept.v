@@ -18,7 +18,6 @@ Definition muloflistover10d_body (ln: (seq nat)*nat): M (nat + (seq nat)*nat)%ty
 end
 end.
 Definition muloflistover10d := while muloflistover10d_body.
-
 Definition muloflistover10 (l: seq nat) :=  foldr (fun x z => if 10 < x then x*z else z) 1 l.
 Lemma all_under10 (l: seq nat): (forall i, i \in l -> i <= 10) -> muloflistover10 l = 1.
 Proof.
@@ -55,32 +54,26 @@ case/boolP: (10 < n) => Hn10.
     move: Hink.
     by rewrite in_cons eq_sym Hnk /=.
   simpl.
-  case/boolP : (10 < n) => Hn. 
+  case/boolP : (10 < n) => Hn.
   rewrite -(IH Hkl').
   by rewrite mulnA (mulnC k n) -mulnA.
   by rewrite -(IH Hkl').
 Qed.
-Lemma maxinseq (l:seq nat):  l != [::] -> \max_(i <- l) i \in l.
+Lemma maxinseq (l:seq nat): ~~(nilp l) -> \max_(i <- l) i \in l.
 Proof.
-move Hlen: (size l) => len.
-elim: len l Hlen.
-- move => l /eqP/nilP Hl.
-  by rewrite Hl.
-- move => n IH l Hs Hl.
-  case: l Hs Hl => //= a l' Hs.
-  rewrite big_cons /maxn => _.
-  case: l' Hs.
-  + rewrite big_nil.
-    rewrite ltn0.
-    by rewrite in_cons eq_refl.
-  + move => m l Hs.
-    case/boolP: (a < (\max_(j <- (m :: l)) j)) => Ha.
-    * case: Hs => Hs.
-      rewrite in_cons.
-      rewrite (IH (m::l) Hs) //=.
-      by apply orbT.
-    * by rewrite in_cons eq_refl.
+(*seq_sub in Fintype.v*)
+(*ex_maxn *)
+move => Hn.
+rewrite -(in_tupleE l).
+rewrite big_tuple.
+case: (eq_bigmax (tnth (in_tuple l))).
+- rewrite cardT.
+  rewrite size_enum_ord.
+  rewrite lt0n. done.
+- move => x ->.
+  by rewrite mem_tnth.
 Qed.
+
 Lemma muloflistover10E (l: seq nat)(n: nat): muloflistover10d (l, n) ≈ @ret _ _ (n * (muloflistover10 l)).
 Proof.
 move Hlen: (size l) => len.
@@ -92,6 +85,7 @@ elim: len l Hlen.
   rewrite/muloflistover10d/muloflistover10d_body fixpointE /=.
   elim: l' Hs => //= [h l''] _ Hs.
   case: Hs => Hs.
+  case:ifP.
   case/boolP: (\max_(i <- (h :: l'')) i <= 10) => [/bigmax_leqP_seq Hm10|Hm10].
     + rewrite catchfailm.
       rewrite bindretf /=.

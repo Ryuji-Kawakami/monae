@@ -1,6 +1,7 @@
 From mathcomp Require Import all_ssreflect.
 From mathcomp Require boolp.
 Require Import hierarchy.
+Require Import Lia.
 
 Local Open Scope monae_scope.
 
@@ -73,7 +74,7 @@ Proof.
 move => nm.
 rewrite/minus1 /minus2.
 rewrite -codiagonalE.
-apply: wBisim_whilewB.
+apply: whilewB.
 move => [n m].
   case: n.
   + case: m => //= .
@@ -168,12 +169,12 @@ Lemma eq_dividefac: forall n, dividefac1 n ≈ dividefac2 n.
 Proof.
 move => n.
 rewrite/dividefac1/dividefac2.
-apply wBisim_whilewB.
+apply whilewB.
 move => [k l].
 case/boolP: (l %% 5 == 0) => Hl //=.
 - by rewrite Hl.
 - rewrite !ifN // bindretf.
-  rewrite wBisim_bindmwB; last by apply (eq_fact_factdelay k 1).
+  rewrite bindmwB; last by apply (eq_fact_factdelay k 1).
   by rewrite bindretf mul1n.
 Qed.
 Definition fastexp_body (nmk: nat*nat*nat) :M (nat + nat*nat*nat)%type :=
@@ -208,33 +209,45 @@ elim: n {-2}n (leqnn n) => n.
          apply (leq_trans Hmn).
          apply expE_aux.
 Qed.
-
 Definition mc91_body (nm: nat*nat):M (nat + nat*nat)%type :=
-  match nm with (n, m) => if n==0 then ret _ (inl m) 
+  match nm with (n, m) => if n==0 then ret _ (inl m)
                           else if m > 100 then ret _ (inr (n.-1,m - 10))
                                           else ret _ (inr (n.+1,m + 11))
 end.
-
 Definition mc91 (n m: nat):= while mc91_body (n.+1,m).
-
 Lemma mc91succE (n m: nat): 90 <= m < 101 -> mc91 n m ≈ mc91 n (m.+1).
 Proof.
-- move => /andP [Hmin Hmax].
-  rewrite/mc91/mc91_body fixpointE /=.
-  move: Hmax.
-  rewrite ltnNge.
-  case:ifP => //= Hf _.
-  rewrite bindretf /= fixpointE /=.
-  have H100 : 100 = 89 + 11. by [].
-  rewrite H100 ltn_add2r Hmin bindretf fixpointE /= fixpointE /=.
-  have ->: m + 11 - 10 = m.+1.
-    rewrite -addnBA // /=.
-    have -> : 11 - 10 = 1. by [].
-    by rewrite addn1.
-  by [].
+(*
+move => /andP [Hmin Hmax].
+rewrite/mc91/mc91_body.
+rewrite fixpointE /=.
+rewrite -/mc91_body/mc91.
+move: Hmax.
+rewrite ltnNge.
+case:ifP => //= Hf _.
+rewrite bindretf /= fixpointE /=.
+have H100 : 100 = 89 + 11. by [].
+rewrite H100 ltn_add2r Hmin bindretf /=. fixpointE /= fixpointE /=.
+have ->: m + 11 - 10 = m.+1.
+  rewrite -addnBA // /=.
+  have -> : 11 - 10 = 1. by [].
+  by rewrite addn1.
+by [].*)
+
+move => /andP [Hmin Hmax].
+rewrite/mc91/mc91_body fixpointE /=.
+move: Hmax.
+rewrite ltnNge.
+case:ifP => //= Hf _.
+rewrite bindretf /= fixpointE /=.
+have H100 : 100 = 89 + 11. by [].
+rewrite H100 ltn_add2r Hmin bindretf fixpointE /= fixpointE /=.
+have ->: m + 11 - 10 = m.+1.
+  rewrite -addnBA // /=.
+  have -> : 11 - 10 = 1. by [].
+  by rewrite addn1.
+by [].
 Qed.
-
-
 Lemma nmSleq (n:nat) (m:nat): n<= m.+1 -> n = m.+1 \/ n <= m.
 Proof.
 move=> H.
@@ -242,16 +255,8 @@ move=> H.
   - by right.
   - left. apply/eqP. by rewrite eqn_leq H Hnleq.
 Qed.
-
 Lemma eq_sub (n m: nat) : n <= m -> m - n = 0 -> m = n.
-Proof.
-move => Hleq Hmn.
-rewrite -(addn0 n).
-rewrite -Hmn.
-rewrite -addnCB.
-by rewrite addnBl_leq //.
-Qed.
-
+Proof. by move => Hleq Hmn;rewrite -(addn0 n) -Hmn -addnCB addnBl_leq //. Qed.
 Lemma leq_exists (n m: nat): n < m -> exists k, n + k = m.
 Proof.
 elim: m.
@@ -278,9 +283,7 @@ case/boolP: (m < 101).
   + move => l IH m Hmin.
     move/nmSleq => [H101 | Hm].
     * by rewrite H101 => _.
-    * rewrite -addn1.
-      rewrite (addnC l 1) addnA.
-      rewrite mc91succE //.
+    * rewrite -addn1 (addnC l 1) addnA mc91succE //.
       ** rewrite addn1.
          apply IH => //.
          rewrite -(addn1 m).
@@ -294,77 +297,38 @@ case/boolP: (m < 101).
     by split => //= .
   by [].
 Qed.
-
 Lemma mc91_101E (n: nat): mc91 n 101 ≈ ret _ 91.
 Proof.
-elim: n => [|n IH].
-- rewrite/mc91/mc91_body fixpointE/= bindretf/= fixpointE/= bindretf/=.
-  have ->: 101 - 10 = 91. by [].
-  done.
-- rewrite/mc91/mc91_body fixpointE/= bindretf/=.
-  rewrite -/mc91_body //.
-  have ->: while mc91_body (n.+1, 101 - 10) = mc91 n 91.
-    have -> : 101 - 10 = 91. by [].
-      by rewrite/mc91.
-  by rewrite mc91E_aux // IH.
+elim: n => [|n IH]; rewrite/mc91/mc91_body fixpointE bindretf/=.
+- by rewrite fixpointE bindretf.
+- by rewrite -/mc91_body // -/(mc91 n 91) mc91E_aux // IH.
 Qed.
-
 Lemma mc91E (n m : nat): m <= 101 -> mc91 n m ≈ ret _ 91.
 Proof.
+move => H101.
 case/boolP: (90 <= m).
-- move => H89 H101.
+- move => H89.
   move: (conj H89 H101) => /andP Hm.
   by rewrite mc91E_aux // mc91_101E.
-- rewrite -leqNgt.
-  rewrite -ltnS.
-  move/leq_exists => [k Hm] _.
-  move: n m Hm.
-  elim: k {-2}k (leqnn k) => k.
+- rewrite -leqNgt -ltnS.
+  move/ltnW/subnKC.
+  set k:= 90 - m.
+  clearbody k.
+  elim: k {-2}k (leqnn k) n m {H101} => k.
   + rewrite leqn0 => /eqP H0 n m.
-    rewrite H0 (addn0 m) => Hm.
-    rewrite Hm.
-    have H90: 90 <= 90 <= 101.
-      by apply/andP; split => //.
-    rewrite mc91E_aux //.
-    by rewrite mc91_101E.
+    rewrite H0 (addn0 m) => ->.
+    by rewrite mc91E_aux // mc91_101E.
   + move =>IH k' Hk n m Hm.
-    have -> : m = 90 - k'.
-      rewrite -Hm.
-      rewrite -addnBA //.
-      by rewrite subnn addn0.
+(*
+    move/(f_equal (subn^~ k')): Hm.
+    rewrite addnK => ->. *)
+    have -> : m = 90 - k' by rewrite -Hm addnK.
     rewrite/mc91/mc91_body fixpointE //=.
-    have -> : (100 < 90 - k') = false.
-      apply/negP/negP.
-      rewrite -leqNgt.
-      rewrite leq_subLR addnC.
-      have H89:89 < 100. by [].
-      apply (leq_trans H89).
-      apply leq_addr.
-    rewrite bindretf /=.
-    rewrite-/mc91_body-/mc91.
-    have -> : while mc91_body (n.+2, 90 - k' + 11) = mc91 (n.+1) (90 - k' + 11). by rewrite/mc91.
-    have Hk'90: k' <= 90.
-      rewrite -Hm addnC.
-      by apply leq_addr.
+    rewrite ifF; last by rewrite ltn_subRL addnC.
+    rewrite bindretf /= -/mc91_body -/(mc91 _ _).
     case/boolP : (k' <= 11) => Hk'.
-      * have H: 90 <= 90 - k' + 11 <= 101.
-          rewrite -addnABC //.
-          apply/andP; split.
-            ** by apply leq_addr.
-            ** rewrite addnBA //.
-               have -> :90 + 11 = 101. by [].
-               by apply leq_subr.
-        by rewrite (mc91E_aux _ _ H) mc91_101E.
-      * move: Hk'.
-        rewrite -ltnNge => Hk'11.
-        rewrite (IH (k' - 11)) //.
-        ** rewrite leq_subLR.
-           apply: (leq_trans Hk).
-           have -> :11 + k = (k.+1) + 10.
-             by rewrite addnC -(addn1 k) -addnA (addnC 1 10) (addn1 10).
-           by apply leq_addr.
-        ** rewrite -addnA.
-           rewrite subnKC //.
-           *** rewrite subnK //.
-           *** apply: (ltn_trans (ltnSn 10) Hk'11).
+      * rewrite mc91E_aux ?mc91_101E //.
+          lia.
+      * rewrite -ltnNge in Hk'.
+        by rewrite (IH (k' - 11)) // ; lia.
 Qed.

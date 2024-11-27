@@ -1,10 +1,6 @@
 Require Import JMeq.
 From mathcomp Require Import all_ssreflect.
-From mathcomp Require Import finmap.
 From mathcomp Require boolp.
-From mathcomp Require Import classical_sets.
-From infotheo Require convex classical_sets_ext.
-Require Import preamble.
 From HB Require Import structures.
 Require Import hierarchy monad_lib fail_lib state_lib trace_lib.
 Require Import monad_transformer.
@@ -84,8 +80,12 @@ Definition dist1 {X Y} (s:tensorS S (Y + X)) :(tensorS S Y) + (tensorS S X) :=
   let (yx, s) := s in match yx with |inl y => inl (y,s) | inr x => inr (x,s) end.
 Definition dist2 {X Y} (xy: (tensorS S Y) + (tensorS  S X)): tensorS S (Y + X) :=
   match xy with | inl (y, s) => (inl y,s) | inr (x, s) => (inr x,s) end.
+
+Definition whileDS {X Y} (body: X -> DS (Y + X)) := curry (while (M # dist1 \o uncurry body)).
+(*
 Definition unitS {X}: X -> homS S (tensorS S X) := fun (x: X) => fun (s: S) => (x, s).
-Definition counitS {X}: tensorS S (homS S X) -> X:= fun fs => let (f,s) := fs in f s.
+Definition counitS {X}: tensorS S (homS S X) -> X:= fun fs => let (f,s) := fs in f s.*)
+(*
 (*curry*)
 Definition adjlr {X Y}:((tensorS S X) -> Y) -> (X -> (homS S Y)) := fun f => homS S # f \o unitS.
 (*uncurry*)
@@ -94,8 +94,9 @@ Lemma adjE1 {X Y} : (@adjlr X Y) \o (@adjrl X Y) = idfun.
 Proof. by apply boolp.funext => f //=. Qed.
 Lemma adjE2 {X Y} : (@adjrl X Y) \o (@adjlr X Y) = idfun.
 Proof. by apply boolp.funext => f /=; apply boolp.funext => sx; case: sx. Qed.
-Definition whileDS {X Y} (body: X -> homS S (M (tensorS S (Y + X)))) := adjlr (while (M # dist1 \o adjrl body)).
-Definition wBisimDS {A} (ds1 ds2:DS A): Prop := forall s:S, wBisim (ds1 s) (ds2 s).
+*)
+
+Definition wBisimDS A (a b: DS A) := forall s, wBisim (a s) (b s).
 Section wBisimDS.
 Notation "a '≈' b" := (wBisimDS a b).
 Lemma wBisimDS_refl A (a: DS A): a ≈ a.
@@ -105,8 +106,9 @@ Proof. move => Hs s. exact: wBisim_sym. Qed.
 Lemma wBisimDS_trans A (d1 d2 d3: DS A): d1 ≈ d2 -> d2 ≈ d3 -> d1 ≈ d3.
 Proof. move => H1 H2 s. exact/wBisim_trans/H2. Qed.
 End wBisimDS.
+(*
 Lemma adjlr_preserve {A B} (f g: tensorS S A -> M (tensorS S B)): (forall s a, wBisim (f (s, a)) (g(s, a))) -> forall a, wBisimDS (adjlr f a) (adjlr g a).
-Proof. by rewrite/wBisimDS/adjlr => H a s //=; rewrite //=homSmap homSmap//=/unitS. Qed.
+Proof. by rewrite/wBisimDS/adjlr => H a s //=; rewrite //=homSmap homSmap//=/unitS. Qed.*)
 (*
 Lemma joinE {A}: (@join DS) A  = (homS S # ((@join Delay) (tensorS S A) ) ) \o ((homS S \o Delay) # counitS ) .
 Proof.
@@ -174,30 +176,20 @@ Lemma fixpointDSE {A B} (f: A -> DS (B + A)%type):
 forall (a:A), wBisimDS (whileDS f a) ( f a >>= (sum_rect (fun => DS B ) Ret (whileDS f))).
 Proof.
 move => a s.
-rewrite/whileDS/adjlr/dist1/= MS_bindE !homSmap/=fixpointE/=/adjrl/unitS/=fmapE bindA/=.
-under eq_bind => x.
-- rewrite bindretf.
-  over.
-set g := uncurry _.
-set h :=  (fun x : tensorS S (B + A) =>
-      sum_rect _ _ _ (let (yx, s0) := x in match yx with
-                              | inl y => inl (y, s0)
-                              | inr x0 => inr (x0, s0)
-                              end)).
-rewrite bindfwB => //=.
-move => [ab x].
-subst g h.
-rewrite /uncurry => /=.
-by case: ab => [b'|a'] //=.
+rewrite/whileDS/curry/dist1/= MS_bindE/uncurry/= fixpointE/= fmapE !bindA.
+apply bindfwB => bas.
+case: bas => [[b'|a'] s'] /=.
+- by rewrite bindretf.
+- by rewrite bindretf.
 Qed.
 Lemma naturalityDSE {A B C} (f: A -> DS (B + A)%type) (g: B -> DS C)(a:A):
    wBisimDS (bindS (whileDS f a) g) (whileDS (fun y => (f y) >>= (sum_rect (fun => DS (C + A)) (DS # inl \o g) (DS # inr \o (@ret DS A )))) a).
 Proof.
-rewrite/bindS/whileDS/adjlr => s //=.
-rewrite !homSmap naturalityE /=.
+rewrite/bindS/whileDS/curry/uncurry => s //=.
+rewrite naturalityE /=.
 apply whilewB => sa.
 case: sa => s' a' /=.
-rewrite/adjrl fmapE fmapE /=MS_bindE !bindA.
+rewrite fmapE fmapE /=MS_bindE !bindA.
 apply bindfwB => sba //=.
 rewrite/dist1/uncurry bindretf.
 case: sba => [[b''|a''] s''] /=.
@@ -213,32 +205,27 @@ Qed.
 Lemma codiagonalDSE {A B} (f: A -> DS ((B + A) + A))(a:A):
    wBisimDS (whileDS ((DS # ((sum_rect (fun => (B + A)%type) idfun inr)))  \o f ) a) (whileDS (whileDS f) a).
 Proof.
-rewrite/whileDS.
-apply adjlr_preserve.
-rewrite -(compE adjrl _) -(compE adjrl _) adjE2 //= => a' s.
+rewrite/whileDS/curry/wBisimDS => s.
 setoid_symmetry.
 apply: wBisim_trans.
 - apply whilewB => sa /=.
-  by rewrite fmapE naturalityE.
+  case: sa => s' a' /=.
+  by rewrite /uncurry fmapE naturalityE /=.
 - rewrite -codiagonalE DSmapE.
   apply whilewB => sa /=.
   case: sa => a'' s'' //=.
-  rewrite/adjrl//=!fmapE.
+  rewrite //=!fmapE.
   have -> : ((homS S \o M) \o tensorS S) # sum_rect (fun=> (B + A)%type) idfun inr = homS S # (M # (tensorS S # sum_rect (fun=> (B + A)%type) idfun inr)).
     by rewrite -compA FCompE.
   rewrite homSmap /= fmapE !bindA.
   apply bindfwB => sbaa.
-  case: sbaa => [[[bl|al']|al] sl].
-  + by rewrite! bindretf /= fmapE bindretf /= bindretf /=.
-  + by rewrite! bindretf /= fmapE !bindretf /=.
-  + by rewrite! bindretf /= fmapE bindretf /= bindretf /=.
+  case: sbaa => [[[bl|al']|al] sl]; by rewrite !bindretf /= fmapE bindretf /= bindretf.
 Qed.
 Lemma whilewBDS {A B} (f g: A -> DS (B + A)) (a: A) : (forall a, wBisimDS (f a) (g a)) -> wBisimDS (whileDS f a) (whileDS g a).
 Proof.
-rewrite/wBisimDS/whileDS => Hfg s.
-apply adjlr_preserve => a' s'.
+rewrite/wBisimDS/whileDS/uncurry/curry => Hfg s.
 apply whilewB => sa /=.
-rewrite! fmapE /adjrl/counitS /=.
+rewrite! fmapE /=.
 case: sa => a'' s'' /=.
 by apply bindmwB.
 Qed.
@@ -252,3 +239,4 @@ HB.instance Definition _ := @isMonadDelay.Build DS
 (*mathcompで例を探す ex. ssr_num realdomaintype *)
 End stateTdelay.
 End StateTdelay.
+HB.export StateTdelay.
