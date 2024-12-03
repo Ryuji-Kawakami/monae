@@ -12,7 +12,7 @@ Local Open Scope monae_scope.
 Module exceptTdelay.
 Section exceptTdelay.
 Variable M: delayMonad.
-Definition DE := MX unit M.
+Notation DE := (MX unit M).
 Definition DEA {A B} :DE (A + B) -> M ((unit + A) + B )%type :=
   M # (fun uab => match uab with
                  |inl u => inl (inl u)
@@ -102,4 +102,3 @@ HB.instance Definition _ := @isMonadDelay.Build DE
 End exceptTdelay.
 End exceptTdelay.
 HB.export exceptTdelay.
-

@@ -3,8 +3,8 @@ From mathcomp Require Import all_ssreflect.
 From mathcomp Require boolp.
 Require Import preamble.
 From HB Require Import structures.
-Require Import delay_monad_model delaystate_model delayexcept_model.
 Require Import hierarchy monad_lib fail_lib state_lib monad_transformer.
+Require Import delay_monad_model delaystate_model delayexcept_model.
 
 Set Implicit Arguments.
 Unset Strict Implicit.
@@ -503,16 +503,15 @@ End ModelTypedStore.
 
 Section ModeldelayTypedStore.
 Variable (M : delayMonad) (N: monad) (MLU: ML_universe).
-Definition DTS'  := DS (seq (binding MLU N)) (DE M) .
-Check (DE M: delayMonad).
-Definition DTS := acto MLU N M.
-Lemma DTSE : DTS  = DTS'.
-Proof. by []. Qed.
-
-HB.instance Definition _ := Monad.on DTS.
-HB.instance Definition _ := @isMonadDelay.Build DTS
-  (@while DTS') (@wBisim DTS') (@wBisim_refl DTS') (@wBisim_sym DTS') (@wBisim_trans DTS') (@fixpointE DTS') (@naturalityE DTS') (@codiagonalE DTS')  (@bindmwB DTS') (@bindfwB DTS') (@whilewB DTS').
-Check (DTS: delayMonad).
-
+Definition DTS := (acto MLU N M).
+HB.instance Definition _ := MonadTypedStore.on DTS.
+HB.instance Definition _ := MonadDelay.on DTS.
+HB.instance Definition _ := MonadDelayTypedStore.on DTS.
 End ModeldelayTypedStore.
+
+Section delayTypedStoreExample.
+Print DTS.
+Print coq_type.
+Let DTSD := DTS Delay
+End delayTypedStoreExample.
 End ModelTypedStore.

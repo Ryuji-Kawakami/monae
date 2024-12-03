@@ -14,11 +14,11 @@ Local Open Scope monae_scope.
 Module TensorS.
 Section tensors.
 Variable S:UU0.
-Definition tensorS := fun (A: UU0) => (A * S)%type. 
-Definition actmt (X Y: UU0):(X -> Y) -> tensorS X -> tensorS Y:=(fun f: X -> Y =>  (fun xs:X * S => match xs with (x, s) => (f x, s) end)). 
+Definition tensorS := fun (A: UU0) => (A * S)%type.
+Definition actmt (X Y: UU0):(X -> Y) -> tensorS X -> tensorS Y:=(fun f: X -> Y =>  (fun xs:X * S => match xs with (x, s) => (f x, s) end)).
 Let tensor_id : FunctorLaws.id actmt.
 Proof.
-rewrite/actmt/FunctorLaws.id => B. 
+rewrite/actmt/FunctorLaws.id => B.
 apply boolp.funext => x.
 by case: x.
 Qed.
@@ -59,7 +59,7 @@ Variable S: UU0.
 Variable M: delayMonad.
 Hint Extern 0 (wBisim _ _) => setoid_reflexivity.
 Notation "a '≈' b" := (wBisim a b).
-Definition DS := MS S M.
+Notation DS := (MS S M).
 Lemma DSE {X}: DS X  = (homS S \o M \o tensorS S) X.
 Proof. by rewrite/DS/MS/homS/tensorS => //=. Qed.
 Lemma homSmap {A B} (f: A -> B) (m:S -> A) : (homS S # f) m = f \o m.
@@ -237,6 +237,48 @@ HB.instance Definition _ := MonadState.on DS.
 HB.instance Definition _ := @isMonadDelay.Build DS
   (@whileDS) (@wBisimDS) wBisimDS_refl wBisimDS_sym wBisimDS_trans (@fixpointDSE) (@naturalityDSE) (@codiagonalDSE)  (@bindmwBDS) (@bindfwBDS) (@whilewBDS).
 (*mathcompで例を探す ex. ssr_num realdomaintype *)
+
 End stateTdelay.
+Section stateTdelayExample.
+Require Import delay_monad_model.
+Local Open Scope do_notation.
+Print Delay.
+Let DSD := MS (seq nat) Delay.
+HB.instance Definition _ := MonadState.on DSD.
+About DSD.
+Check (DSD: stateMonad (seq nat)).
+Let stepsds {A S} (n: nat) (ds: MS S Delay A) (s: S):= steps n (ds s).
+Definition factds_body: nat -> MS nat Delay (unit + nat)%type :=
+fun (m:nat) => ((do s <- (@get nat (MS nat Delay)) ;
+              match m with
+             |O => do _ <- (@put nat (MS nat Delay) s) ;
+                 (@ret (MS nat Delay) _ (inl tt))
+           |m'.+1 => do _<- (@put nat (MS nat Delay) (m * s )) ; (@ret (MS nat Delay) _ (inr m'))
+         end)).
+
+Definition factds := whileDS factds_body.
+Compute (stepsds 20 (factds 5) 1).
+Definition bubblesortd_body1 (i: nat)(j: nat): DSD (unit + nat)%type :=
+  do s <- get;
+  if i < j then let sj := nth 0 s j in let sjp := nth 0 s (j-1) in
+                                       if sj < sjp then do _ <- put (set_nth 0 s (j-1) sj);
+                                                        do s' <- get;
+                                                        do _ <- put (set_nth 0 s' j (sjp)); (@ret DSD _ (inr (j-1)))
+                                       else (@ret DSD _ (inr (j-1)))
+  else (@ret DSD _ (inl tt)).
+Definition bubblesortd_body2 (i: nat): DSD (unit + nat)%type :=
+do s <- get;
+let len := length s in if i == len
+                       then (@ret DSD _ (inl tt))
+                       else (@bind DSD _ _ )((whileDS (bubblesortd_body1 i)) (len - 1))(fun _ =>  (@ret DSD _ (inr (i.+1)))).
+Definition bubblesortd := whileDS bubblesortd_body2.
+Let testseq2 := 8::4::3::7::6::5::2::1::nil.
+Compute (stepsds 100 (bubblesortd 0) testseq2).
+Local Notation sorted := (sorted <=%O).
+(*runSTがいる？*)
+
+Lemma bubblesort_sorted (s: seq nat)(x: nat): exists (s': seq  nat), (forall i, i.+1 < size s' -> (nth x s' i) <= (nth x s' i.+1)) /\ wBisimDS (put s') ((@bind DSD _ _ )(put s) (fun _ => (bubblesortd 0))).
+Abort.
+End stateTdelayExample.
 End StateTdelay.
 HB.export StateTdelay.
