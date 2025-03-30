@@ -1,5 +1,6 @@
 From mathcomp Require Import all_ssreflect.
 From HB Require Import structures.
+From Paco Require Import paco.
 Require Import monad_transformer hierarchy delay_monad_model delayexcept_model.
 
 Set Implicit Arguments.
@@ -25,7 +26,7 @@ split.
   case: (p x) => //.
   rewrite guardF bindfailf /wBisimDE.
   move/iff_wBisims_wBisim.
-  move/iff_Terminates_wBret => contr.
+  move/iff_Terminates_wBsret => contr.
   inversion contr.
 rewrite/assert => ->.
 by rewrite guardT bindskipf.
@@ -39,10 +40,9 @@ Lemma pcorrect X A x (p : pred (A + X)) (f : X -> M (A + X)) :
 Proof.
 move => Hx HInv.
 case: (TerminatesP (whileDE f x)) =>
-  [[[u' /iff_Terminates_wBret/iff_wBisims_wBisim Hs
-    |x' /iff_Terminates_wBret [n Hs]]]|/iff_Diverges_wBisimspin Hs].
+  [[[u' /iff_Terminates_wBsret/iff_wBisims_wBisim Hs |x' /iff_Terminates_wBsret [n Hs]]]|/iff_Diverges_wBisimspin Hs].
 - by rewrite/bassert bindXE Hs !bindretf bindXE !bindretf.
-- rewrite steps_Dnow in Hs.
+- - rewrite steps_Dnow in Hs.
   move: x x' Hx Hs.
   elim: n => [/=|n IH] x x' Hx;
              rewrite whileDEE whileE /DEA functions.compE fmapE.
@@ -58,29 +58,35 @@ case: (TerminatesP (whileDE f x)) =>
   set d := f x.
   have : d ≈ f x by [].
   move: d.
-  cofix CIH => d.
+  pcofix CIH => d.
   case Hb: d => [uxx|d'].
     case: uxx Hb => [u//|[y/= Hd|y/= Hd]] Hb;
                     rewrite bindretf/=bindretf.
       rewrite/bassert bindXE bindretf => _.
       move: (HInv x Hx).
-      by rewrite -Hb !bindretf /=.
+      rewrite -Hb !bindretf /=.
+      move => ?.
+      by apply (@paco2_mon_bot _ _ (@wBisim_gen _)) => //.
     move: (HInv x Hx).
     rewrite !bindXE -Hb !bindretf/=.
     move => HH.
     move/IH => IH'.
     rewrite -!whileDEE.
     rewrite /bassert !bindDmf.
+    apply (@paco2_mon_bot _ _ (@wBisim_gen _)) => //.
     rewrite wBisim_DLater -bindXE.
     rewrite -{2}IH' /bassert.
-    by rewrite /retX.
+    rewrite /retX.
+    by apply wBisim_refl.
     move: HH.
     by move/assertE.
     rewrite/bassert !bindXE !bindA !bindDmf /= => Hd' Hs.
+    pfold.
     apply wBLater.
-  rewrite -!bindA -bindXE -/(bassert p _).
-  apply: CIH.
-  by rewrite -Hd' wBisim_DLater.
+    right.
+    rewrite -!bindA -bindXE -/(bassert p _).
+    apply: CIH.
+    by rewrite -Hd' wBisim_DLater.
   apply: monotonicity_steps'.
   by rewrite /= /bassert bindA Hs.
 rewrite !bindXE /bassert Hs.

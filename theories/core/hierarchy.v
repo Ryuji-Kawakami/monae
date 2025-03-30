@@ -958,11 +958,12 @@ End setoid.
 
 HB.mixin Record isMonadDelayAssert (M : UU0 -> UU0)
     of MonadDelayExcept M := {
-  pcorrect : forall (X : UU0) (x : X) (p : pred X) (f : X -> M (X + X)%type) ,
-  assert p x ≈ @ret M _ x  ->
-   (forall x, assert p x ≈ @ret M _ x ->
-    f x >>= sum_rect (fun => M X) (assert p) (assert p) ≈ f x >>= sum_rect (fun => M X) Ret Ret) ->
-   bassert p (while f x) ≈ while f x
+  pcorrect : forall X A x (p : pred (A + X)%type) (f : X -> M (A + X)%type),
+   p (inr x)  ->
+   (forall x, p (inr x) ->
+          f x >>= sum_rect (fun => M (A + X)%type) ((assert p) \o inl) ((assert p) \o inr) ≈
+    f x >>= sum_rect (fun => M (A + X)%type) (Ret \o inl) (Ret \o inr)) ->
+   bassert p ((while f x) >>= (Ret \o inl)) ≈ while f x >>= (Ret \o inl)
  }.
 
 #[short(type=delayAssertMonad)]
