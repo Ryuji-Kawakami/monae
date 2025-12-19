@@ -115,7 +115,7 @@ exact: bindmwB.
 Qed.
 
 Lemma fixpoint (f : A -> elgotS (B + A)) (a : A) :
-  while f a ≈ (f a >>= sum_rect (fun=> elgotS B) Ret (while f)).
+  while f a ≈ (f a >>= sum_out Ret (while f : A -> elgotS B)).
 Proof.
 move=> s.
 rewrite /while /curry /dist1/= MS_bindE /uncurry/= fixpointwB/= fmapE !bindA.
@@ -124,11 +124,9 @@ Qed.
 
 End elgotS_lang.
 
-Lemma naturality {A B C} (f : A -> elgotS (B + A)%type) (g : B -> elgotS C) (a : A) :
+Lemma naturality {A B C} (f : A -> elgotS (B + A)%type) (g : B -> elgotS C) a :
   bindS (while f a) g ≈
-  while (fun y => f y >>= sum_rect (fun => elgotS (C + A))
-                           (elgotS # inl \o g)
-                           (elgotS # inr \o Ret)) a.
+  while (fun y => f y >>= sum_out (elgotS # inl \o g) (elgotS # inr \o Ret)) a.
 Proof.
 rewrite /bindS /while /curry /uncurry => s //=.
 rewrite naturalitywB /=.
@@ -148,7 +146,7 @@ case: sba => [[b''|a''] s''] /=.
 Qed.
 
 Lemma codiagonal {A B} (f : A -> elgotS ((B + A) + A)) (a : A) :
-  while ((elgotS # ((sum_rect (fun => (B + A)%type) idfun inr))) \o f) a
+  while ((elgotS # sum_out idfun inr) \o f) a
   ≈
   while (while f) a.
 Proof.
@@ -160,8 +158,8 @@ apply: wBisim_trans.
 rewrite -codiagonalwB elgotS_map.
 apply: whilewB => -[] a'' s'' //=.
 rewrite //= !fmapE.
-have -> : ((reader S \o M) \o writer S) # sum_rect (fun=> (B + A)%type) idfun inr =
-          reader S # (M # (writer S # sum_rect (fun=> (B + A)%type) idfun inr)).
+have -> : ((reader S \o M) \o writer S) # sum_out idfun inr =
+          reader S # (M # (writer S # sum_out idfun (@inr B A))).
   by rewrite -compA FCompE.
 rewrite reader_map /= fmapE !bindA.
 by apply: bindfwB => -[[[bl|al']|al] sl]; rewrite !bindretf /= fmapE !bindretf.
@@ -170,9 +168,8 @@ Qed.
 Lemma uniform {A B C} (f : A -> elgotS (B + A)) (g : C -> elgotS (B + C))
     (h : C -> A) :
   (forall c, f (h c) ≈
-             g c >>= sum_rect (fun => elgotS (B + A))
-                                       ((elgotS # inl) \o Ret)
-                                       ((elgotS # inr) \o Ret \o h)) ->
+             g c >>= sum_out ((elgotS # inl) \o Ret)
+                             ((elgotS # inr) \o Ret \o h)) ->
   forall c, while f (h c) ≈ while g c.
 Proof.
 move=> H c s.
@@ -250,7 +247,7 @@ by case: a.
 Qed.
 
 Lemma fixpoint {A B} (f : A -> elgotX (B + A)) (a : A) :
-  while f a ≈ f a >>= sum_rect (fun => elgotX B ) Ret (while f).
+  while f a ≈ f a >>= sum_out Ret (while f).
 Proof.
 rewrite /while /elgotXA fixpointwB /= fmapE /= bindA.
 apply (bindfwB _ _ _ _ (f a)) => uba.
@@ -259,9 +256,7 @@ Qed.
 
 Lemma naturality {A B C} (f : A -> elgotX (B + A)) (g : B -> elgotX C) (a : A) :
   while f a >>= g ≈
-  while (fun y => f y >>= sum_rect (fun => elgotX (C + A))
-                                     (elgotX # inl \o g)
-                                     (elgotX # inr \o Ret)) a.
+  while (fun y => f y >>= sum_out (elgotX # inl \o g) (elgotX # inr \o Ret)) a.
 Proof.
 rewrite /while /elgotXA bindXE naturalitywB.
 apply: whilewB => a' /=.
@@ -275,7 +270,7 @@ move=> [u|[b''|a'']] /=.
 Qed.
 
 Lemma codiagonal {A B} (f : A -> elgotX ((B + A) + A)) (a : A) :
-  while ((elgotX # (sum_rect (fun => (B + A)%type) idfun inr)) \o f ) a
+  while ((elgotX # sum_out idfun inr) \o f ) a
   ≈
   while (while f) a.
 Proof.
@@ -305,9 +300,8 @@ exact: Hfg.
 Qed.
 
 Lemma uniform {A B C} (f : A -> elgotX (B + A)) (g : C -> elgotX (B + C)) (h : C -> A) :
-  (forall c, f (h c) ≈ (g c >>= sum_rect (fun => elgotX (B + A))
-                                 ((elgotX # inl) \o Ret)
-                                 ((elgotX # inr) \o Ret \o h))) ->
+  (forall c, f (h c) ≈
+     g c >>= sum_out ((elgotX # inl) \o Ret) ((elgotX # inr) \o Ret \o h)) ->
   forall c, while f (h c) ≈ while g c.
 Proof.
 move=> H c.
@@ -315,7 +309,7 @@ rewrite /while.
 apply: (uniformwB _ _ _ (elgotXA \o f)) => c' /=.
 rewrite /elgotXA/= !fmapE (H c') !bindA.
 apply: bindfwB.
-by move=> [x|[b''|c'']]; rewrite /= !bindretf /= fmapE !bindretf // fmapE bindretf.
+by move=> [|[|]] x; rewrite /= !bindretf /= fmapE !bindretf // fmapE bindretf.
 Qed.
 
 HB.instance Definition _ := MonadExcept.on elgotX.
@@ -356,15 +350,15 @@ Lemma ElgotXwhileE A B (body : A -> M (B + A)) x :
   ElgotX.while body x = DelayOps.while (@ElgotX.elgotXA Delay _ _ \o body) x.
 Proof. by []. Qed.
 
-Lemma assertE X x (p : pred X) : @assert M _ p x ≈e Ret x <-> (p x) = true.
+Lemma assertP X x (p : pred X) : reflect (@assert M _ p x ≈e Ret x) (p x).
 Proof.
-split.
-  rewrite /assert; case: (p x) => //.
-  rewrite guardF bindfailf /ElgotX.wB.
-  move/wBisims_wBisim/Stop_wBisimsRet.
-  by inversion 1.
-rewrite /assert => ->.
-by rewrite guardT bindskipf.
+apply: (iffP idP).
+  rewrite /assert => ->.
+  by rewrite guardT bindskipf.
+rewrite /assert; case: (p x) => //.
+rewrite guardF bindfailf /ElgotX.wB.
+move/wBisims_wBisim/Stop_wBisimsRet.
+by inversion 1.
 Qed.
 
 HB.export ElgotX.
@@ -372,12 +366,11 @@ HB.export ElgotX.
 Lemma pcorrect X A x (p : pred (A + X)) (f : X -> M (A + X)) :
    p (inr x)  ->
    (forall x, p (inr x) ->
-      f x >>= sum_rect (fun => M (A + X))
-                  ((assert p) \o inl)
-                  (assert p \o inr)
+      f x >>= sum_out ((assert p) \o inl) (assert p \o inr)
       ≈e
-      f x >>= sum_rect (fun => M (A + X)) (Ret \o inl) (Ret \o inr)) ->
-   bassert p (ElgotX.while f x >>= (Ret \o inl)) ≈e ElgotX.while f x >>= (Ret \o inl).
+      f x >>= sum_out (Ret \o inl) (Ret \o inr)) ->
+   bassert p (ElgotX.while f x >>= (Ret \o inl)) ≈e
+   ElgotX.while f x >>= (Ret \o inl).
 Proof.
 move => Hx HInv.
 case: (StopP (ElgotX.while f x)) =>
@@ -415,7 +408,7 @@ case: (StopP (ElgotX.while f x)) =>
       rewrite wBisim_Later -bindXE.
       rewrite -{2}IH' /bassert.
         by [].
-      by move/assertE: HH.
+      by move/assertP: HH.
     rewrite/bassert !bindXE !bindA !bind_Later /= => Hd' Hs.
     apply wBLater.
     rewrite -!bindA -bindXE -/(bassert p _).

@@ -905,27 +905,27 @@ Arguments wBisim {s A}.
 Notation "a '≈' b" := (wBisim a b).
 Hint Extern 0 (wBisim _ _) => apply wBisim_refl : core.
 
+Definition sum_out A B C (f : A -> C) (g : B -> C) (s : A + B) :=
+  match s with inl a => f a | inr b => g b end.
+
+Lemma sum_out_rect A B C f g : @sum_out A B C f g = sum_rect (fun=>C) f g.
+Proof. done. Qed.
+
 HB.mixin Record isMonadElgot (M : UU0 -> UU0) of WBisim M := {
   while : forall {A B : UU0}, (A -> M (B + A)%type) -> A -> M B;
   whilewB : forall (A B : UU0) (f g : A -> M (B + A)%type) (a : A),
     (forall a, f a ≈ g a) -> while f a ≈ while g a ;
   fixpointwB : forall (A B : UU0) (f : A -> M (B + A)%type) (a : A),
-    while f a ≈
-    (f a >>= sum_rect (fun=> M B) Ret (while f));
-  naturalitywB : forall (A B C : UU0) (f : A -> M (B + A)%type) (g : B -> M C) (a : A),
+    while f a ≈ (f a >>= sum_out Ret (while f)) ;
+  naturalitywB : forall (A B C : UU0) f (g : B -> M C) (a : A),
     (while f a >>= g) ≈
-    (while (fun y => f y >>= sum_rect (fun => M (C + A)%type)
-                                          (M # inl \o g)
-                                          (M # inr \o Ret)) a);
+    (while (fun y => f y >>= sum_out (M # inl \o g) (M # inr \o Ret)) a) ;
   codiagonalwB : forall (A B : UU0) (f : A -> M ((B + A) + A)%type) (a : A),
-    while ((M # (sum_rect (fun=> (B + A)%type) idfun inr)) \o f) a
-    ≈ while (while f) a ;
+    while ((M # sum_out idfun inr) \o f) a ≈ while (while f) a ;
   uniformwB : forall (A B C : UU0) (f : A -> M (B + A)%type)
       (g : C -> M (B + C)%type) (h : C -> A),
     (forall c, f (h c) ≈
-               (g c >>= sum_rect (fun => M (B + A)%type)
-                                      ((M # inl) \o Ret)
-                                      ((M # inr) \o Ret \o h))) ->
+               (g c >>= sum_out ((M # inl) \o Ret) ((M # inr) \o Ret \o h))) ->
     forall c, while f (h c) ≈ while g c
 }.
 
@@ -984,15 +984,14 @@ Qed.
 
 End setoid_elgotExceptMonad.
 
-HB.mixin Record isMonadElgotAssert (M : UU0 -> UU0)
-    of MonadElgotExcept M := {
-  pcorrect : forall (X A : UU0) (x : X) (p : pred (A + X)) (f : X -> M (A + X)%type),
-  p (inr x)  ->
-   (forall x, p (inr x) ->
-    f x >>= sum_rect (fun => M (A + X)%type) ((assert p) \o inl) ((assert p) \o inr) ≈
-    f x >>= sum_rect (fun => M (A + X)%type) (Ret \o inl) (Ret \o inr)) ->
-   bassert p ((while f x) >>= (Ret \o inl)) ≈ while f x >>= (Ret \o inl)
- }.
+HB.mixin Record isMonadElgotAssert (M : UU0 -> UU0) of MonadElgotExcept M := {
+  pcorrect : forall (X A : UU0) x (p : pred (A + X)) (f : X -> M (A + X)%type),
+    p (inr x) ->
+    (forall y, p (inr y) ->
+      f y >>= sum_out (assert p \o inl) (assert p \o inr) ≈
+      f y >>= sum_out (Ret \o inl) (Ret \o inr)) ->
+    bassert p (while f x >>= (Ret \o inl)) ≈ while f x >>= (Ret \o inl)
+}.
 
 #[short(type=elgotAssertMonad)]
 HB.structure Definition MonadElgotAssert := { M of isMonadElgotAssert M &}.

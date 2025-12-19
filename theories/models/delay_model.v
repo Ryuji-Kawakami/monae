@@ -664,7 +664,7 @@ Qed.
 
 (* the next four laws derived from Complete Elgot monads *)
 Lemma fixpointwBs {A B} (f : A -> M (B + A)) (a : A) :
-  while f a ≈s f a >>= sum_rect (fun => M B) (@ret M B) (while f).
+  while f a ≈s f a >>= sum_out Ret (while f).
 Proof.
 rewrite whileE.
 apply: bindfwBisims => -[b'|a'] //=.
@@ -672,20 +672,22 @@ exact: wBisims_Later.
 Qed.
 
 Lemma fixpointwB {A B} (f : A -> M (B + A)) (a : A) :
-  while f a ≈ f a >>= sum_rect (fun => M B) (@ret M B ) (while f).
+  while f a ≈ f a >>= sum_out Ret (while f).
 Proof. by apply wBisims_wBisim; exact: fixpointwBs. Qed.
 
 CoFixpoint naturalitywB' {A B C} (f : A -> M (B + A)) (g : B -> M C) (d : M (B + A)) :
-  (d >>= (fun ab : B + A => match ab with
-                            | inl b => Now b
-                            | inr a => Later (while f a)
-                            end)) >>= g
+  (d >>= fun ba : B + A => match ba with
+                           | inl b => Now b
+                           | inr a => Later (while f a)
+                           end) >>= g
   ≈
-  (d >>= sum_rect (fun=> M (C + A)) (M # inl \o g) (M # inr \o (@ret M A))) >>=
-   (fun ab : C + A => match ab with
-                      | inl b => Now b
-                      | inr a => Later (while (fun y : A => f y >>= sum_rect (fun=> M (C + A)) (M # inl \o g) (M # inr \o (@ret M A))) a)
-                      end).
+  (d >>= sum_out (M # inl \o g) (M # inr \o Ret)) >>=
+    fun ca : C + A =>
+      match ca with
+      | inl c => Now c
+      | inr a => Later
+          (while (fun y => f y >>= sum_out (M # inl \o g) (M # inr \o Ret)) a)
+      end.
 Proof.
 case: d => [[b|a]|d].
 - apply wBisims_wBisim.
@@ -710,28 +712,24 @@ Qed.
 
 Lemma naturalitywB {A B C} (f : A -> M (B + A)) (g : B -> M C) (a : A) :
   (while f a) >>= g ≈
-  while (fun y => f y >>= sum_rect (fun => M (C + A))
-                                   (M # inl \o g)
-                                   (M # inr \o (@ret M A ))) a.
+  while (fun y => f y >>= sum_out (M # inl \o g) (M # inr \o Ret)) a.
 Proof. by rewrite whileE whileE; apply naturalitywB'. Qed.
 
-CoFixpoint codiagonalwB' {A B} (f: A -> M ((B + A) + A))(d: M ((B + A) + A)) :
-  ((d >>= (Ret \o sum_rect (fun=> (B + A)%type) idfun inr)) >>=
-  (fun ab : B + A => match ab with
+CoFixpoint codiagonalwB' {A B} (f: A -> M ((B + A) + A)) (d: M ((B + A) + A)) :
+  (d >>= (Ret \o sum_out idfun inr)) >>=
+  (fun ba : B + A => match ba with
                      | inl b => Now b
-                     | inr a => Later (while (M # sum_rect (fun=> (B + A)%type)
-                                                           idfun
-                                                           inr \o f) a)
-                     end))
+                     | inr a => Later (while (M # sum_out idfun inr \o f) a)
+                     end)
   ≈
-  ((d >>= (fun ab : B + A + A => match ab with
+  (d >>= (fun ba : B + A + A => match ba with
                                  | inl b => Now b
                                  | inr a => Later (while f a)
                                   end)) >>=
-   (fun ab : B + A => match ab with
-                      | inl b => Now b
-                      | inr a => Later (while (while f) a)
-                      end)).
+  fun ba : B + A => match ba with
+                    | inl b => Now b
+                    | inr a => Later (while (while f) a)
+                    end.
 Proof.
 case: d => [ [[b|a]|a]|d'].
 - by rewrite bindretf bindretf bindretf //= bindretf.
@@ -743,10 +741,10 @@ case: d => [ [[b|a]|a]|d'].
 Qed.
 
 Lemma codiagonalwB {A B} (f : A -> M ((B + A) + A)) a :
-  while ((Delay # ((sum_rect (fun => (B + A)%type) idfun inr))) \o f) a
+  while ((Delay # sum_out idfun inr) \o f) a
   ≈
   while (while f) a.
-Proof. by rewrite whileE whileE whileE //= fmapE; exact: codiagonalwB'. Qed.
+Proof. by rewrite 3!whileE //= fmapE; exact: codiagonalwB'. Qed.
 
 Lemma whilewB {A B} (f g : A -> M (B + A)) (a : A) :
   (forall a, f a ≈ g a) -> while f a ≈ while g a.
@@ -792,9 +790,8 @@ by apply: IH.
 Qed.
 
 Lemma uniformwB {A B C} (f : A -> M (B + A)) (g : C -> M (B + C)) (h : C -> A) :
-  (forall c, f (h c) ≈ g c >>= sum_rect (fun => M (B + A))
-                                        ((M # inl) \o Ret)
-                                        ((M # inr) \o Ret \o h)) ->
+  (forall c,
+    f (h c) ≈ g c >>= sum_out ((M # inl) \o Ret) ((M # inr) \o Ret \o h)) ->
   forall c, while f (h c) ≈ while g c.
 Proof.
 move => H c.
